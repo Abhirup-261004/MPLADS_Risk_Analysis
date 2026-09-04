@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1d3a" />
+    <title>Prahari AI | Secure Sign In</title>
+  </head>
+  <body>
+    <div id="root">
+      <main class="boot-screen">
+        <section>
+          <p>PRAHARI AI</p>
+          <h1>Starting secure access portal...</h1>
+          <small class="boot-detail">Preparing the application</small>
+          <span></span>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      window.addEventListener('error', function (event) {
+        var title = document.querySelector('.boot-screen h1');
+        var detail = document.querySelector('.boot-screen .boot-detail');
+        if (title) title.textContent = 'App startup failed.';
+        if (detail) detail.textContent = event.message || 'Open this project through the Vite server at localhost:5173.';
+      });
+    </script>
+  </body>
+</html>

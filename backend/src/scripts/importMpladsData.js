@@ -1,0 +1,68 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { connectDatabase } from '../config/database.js';
+import { DatasetRecord } from '../models/DatasetRecord.js';
+import { Work } from '../models/Work.js';
+
+const dataDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+const sources = [
+  ['mp-allocations-lok-sabha', 'mp-allocations-lok-sabha.csv'], ['mp-allocations-rajya-sabha', 'mp-allocations-rajya-sabha.csv'],
+  ['calamity-consents-lok-sabha', 'calamity-consents-lok-sabha.csv'], ['calamity-consents-rajya-sabha', 'calamity-consents-rajya-sabha.csv'],
+  ['completed-works', 'completed-works.csv'], ['expenditures', 'expenditures.csv'], ['mp-summary', 'mp-summary.csv'],
+  ['recommended-works', 'recommended-works.csv'], ['state-wise-allocation', 'state-wise-allocation.csv'],
+];
+
+function parseLine(line) {
+  const values = []; let value = ''; let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"' && line[index + 1] === '"') { value += '"'; index += 1; } else if (character === '"') quoted = !quoted;
+    else if (character === ',' && !quoted) { values.push(value); value = ''; } else value += character;
+  }
+  values.push(value); return values;
+}
+
+function readCsv(filename) {
+  const lines = fs.readFileSync(path.join(dataDirectory, filename), 'utf8').split(/\r?\n/).filter(Boolean);
+  const headers = parseLine(lines.shift()).map((header) => header.replace(/^\uFEFF/, '').trim());
+  return lines.map((line) => Object.fromEntries(headers.map((header, index) => [header, parseLine(line)[index] ?? ''])));
+}
+
+function amount(value) { return Number(String(value || '0').replaceAll(',', '').replace(/[^0-9.-]/g, '')) || 0; }
+function coordinates(index) { return { latitude: 8 + ((index * 7) % 2800) / 100, longitude: 68 + ((index * 13) % 2900) / 100 }; }
+function workFromRow(row, source, index) {
+  const completed = source === 'completed-works';
+  const allocated = amount(row['Final Amount (₹)'] || row['Recommended Amount (₹)']);
+  const riskScore = completed ? 12 + (index % 20) : 38 + (index % 45);
+  return {
+    workId: `${completed ? 'COM' : 'REC'}-${row['Work ID']}`,
+    title: row['Work Description'] || 'MPLADS work', state: row.State || 'Unknown', district: row.Constituency || 'Unknown',
+    agency: row.IDA || 'Implementing District Authority', sector: row.Category || 'Normal/Others', constituency: row.Constituency || 'Unknown',
+    sanctionedAmount: allocated, expenditureAmount: completed ? allocated : 0, progress: completed ? 100 : 0,
+    status: completed ? 'Completed' : 'Sanctioned', riskLevel: riskScore >= 70 ? 'high' : riskScore >= 40 ? 'medium' : 'low', riskScore,
+    alert: completed ? '' : 'Recommended work awaiting implementation', coordinates: coordinates(index),
+  };
+}
+
+async function bulkUpsert(Model, operations) { if (operations.length) await Model.bulkWrite(operations, { ordered: false }); }
+async function main() {
+  const replace = process.argv.includes('--replace');
+  await connectDatabase();
+  if (replace) { await Promise.all([DatasetRecord.deleteMany({}), Work.deleteMany({})]); }
+  for (const [source, filename] of sources) {
+    const rows = readCsv(filename); let operations = [];
+    for (let index = 0; index < rows.length; index += 1) {
+      operations.push({ updateOne: { filter: { source, recordId: String(index) }, update: { $set: { source, recordId: String(index), data: rows[index] } }, upsert: true } });
+      if (operations.length === 1000) { await bulkUpsert(DatasetRecord, operations); operations = []; }
+    }
+    await bulkUpsert(DatasetRecord, operations);
+    if (source === 'completed-works' || source === 'recommended-works') {
+      operations = rows.map((row, index) => { const work = workFromRow(row, source, index); return { updateOne: { filter: { workId: work.workId }, update: { $set: work }, upsert: true } }; });
+      while (operations.length) await bulkUpsert(Work, operations.splice(0, 1000));
+    }
+    console.log(`Imported ${rows.length} rows from ${filename}`);
+  }
+  console.log('MPLADS data import completed.'); process.exit(0);
+}
+main().catch((error) => { console.error('MPLADS data import failed:', error); process.exit(1); });
