@@ -23,5 +23,8 @@ const workSchema = new mongoose.Schema(
 );
 
 workSchema.index({ title: 'text', workId: 'text', district: 'text', agency: 'text' });
+workSchema.index({ riskScore: -1, updatedAt: -1 });
+workSchema.index({ riskLevel: 1, riskScore: -1 });
+workSchema.index({ agency: 1, state: 1, riskScore: -1 });
 
 export const Work = mongoose.model('Work', workSchema);

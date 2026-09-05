@@ -206,51 +206,138 @@ export const getAgencyRiskProfile = asyncHandler(async (req, res) => {
 });
 
 export const getMapIntelligence = asyncHandler(async (req, res) => {
-  const works = await Work.find({}, 'workId title state district sanctionedAmount expenditureAmount progress riskScore riskLevel alert status coordinates').sort({ riskScore: -1 }).lean();
   const selectedRegion = req.query.state || 'India';
-  const regionWorks = selectedRegion === 'India' ? works : works.filter((work) => work.state === selectedRegion);
-  const totalExpenditure = regionWorks.reduce((sum, work) => sum + work.expenditureAmount, 0);
-  const highRiskWorks = regionWorks.filter((work) => work.riskLevel === 'high').sort((a, b) => b.riskScore - a.riskScore);
-  const zones = new Map();
-  highRiskWorks.forEach((work) => {
-    const key = `${work.state}|${work.district}`;
-    const zone = zones.get(key) || { workId: work.workId, title: `${work.district} High-Risk Zone`, topWorkId: work.workId, state: work.state, district: work.district, riskLevel: 'high', riskTotal: 0, workCount: 0, sanctionedAmount: 0, expenditureAmount: 0, progressTotal: 0, alert: '' };
-    zone.riskTotal += work.riskScore; zone.workCount += 1; zone.sanctionedAmount += work.sanctionedAmount; zone.expenditureAmount += work.expenditureAmount; zone.progressTotal += work.progress;
-    if (work.riskScore > (zone.topRiskScore || 0)) { zone.topWorkId = work.workId; zone.topRiskScore = work.riskScore; zone.alert = work.alert; }
-    zones.set(key, zone);
+  const regionMatch = selectedRegion === 'India' ? {} : { state: selectedRegion };
+  const highRiskMatch = { ...regionMatch, riskLevel: 'high' };
+  const [summaryRows, zoneRows, hotspots] = await Promise.all([
+    Work.aggregate([
+      { $match: regionMatch },
+      {
+        $group: {
+          _id: null,
+          totalWorks: { $sum: 1 },
+          totalExpenditure: { $sum: '$expenditureAmount' },
+          highRiskWorks: { $sum: { $cond: [{ $eq: ['$riskLevel', 'high'] }, 1, 0] } },
+          delayedWorks: { $sum: { $cond: [{ $eq: ['$status', 'Delayed'] }, 1, 0] } },
+          averageRiskScore: { $avg: '$riskScore' },
+        },
+      },
+    ]),
+    Work.aggregate([
+      { $match: highRiskMatch },
+      { $sort: { riskScore: -1 } },
+      {
+        $group: {
+          _id: { state: '$state', district: '$district' },
+          workId: { $first: '$workId' },
+          topWorkId: { $first: '$workId' },
+          topRiskScore: { $first: '$riskScore' },
+          alert: { $first: '$alert' },
+          riskTotal: { $sum: '$riskScore' },
+          workCount: { $sum: 1 },
+          sanctionedAmount: { $sum: '$sanctionedAmount' },
+          expenditureAmount: { $sum: '$expenditureAmount' },
+          progressTotal: { $sum: '$progress' },
+        },
+      },
+    ]),
+    Work.find(highRiskMatch, 'district state riskScore').sort({ riskScore: -1 }).limit(6).lean(),
+  ]);
+  const summary = summaryRows[0] || { totalWorks: 0, totalExpenditure: 0, highRiskWorks: 0, delayedWorks: 0, averageRiskScore: 0 };
+  const markers = zoneRows
+    .map((zone) => ({
+      workId: zone.workId,
+      title: `${zone._id.district} High-Risk Zone`,
+      topWorkId: zone.topWorkId,
+      topRiskScore: zone.topRiskScore,
+      state: zone._id.state,
+      district: zone._id.district,
+      riskLevel: 'high',
+      riskScore: Math.round(zone.riskTotal / zone.workCount),
+      workCount: zone.workCount,
+      sanctionedAmount: zone.sanctionedAmount,
+      expenditureAmount: zone.expenditureAmount,
+      progress: Math.round(zone.progressTotal / zone.workCount),
+      coordinates: zoneCoordinates(zone._id.state, zone._id.district),
+      alert: zone.alert || `${zone.workCount} high-risk works require attention`,
+    }))
+    .sort((a, b) => b.riskScore - a.riskScore || b.workCount - a.workCount)
+    .slice(0, 750);
+  res.json({
+    selectedRegion,
+    metrics: {
+      totalWorks: summary.totalWorks,
+      totalExpenditure: summary.totalExpenditure,
+      highRiskWorks: summary.highRiskWorks,
+      delayedWorks: summary.delayedWorks,
+      averageRiskScore: summary.totalWorks ? Math.round(summary.averageRiskScore) : 0,
+    },
+    markers,
+    hotspots: hotspots.map((work) => ({ district: work.district, state: work.state, score: work.riskScore })),
   });
-  const markers = [...zones.values()].map((zone) => ({ ...zone, riskScore: Math.round(zone.riskTotal / zone.workCount), progress: Math.round(zone.progressTotal / zone.workCount), coordinates: zoneCoordinates(zone.state, zone.district), alert: zone.alert || `${zone.workCount} high-risk works require attention` })).sort((a, b) => b.riskScore - a.riskScore || b.workCount - a.workCount).slice(0, 750);
-  const hotspots = highRiskWorks.slice(0, 6).map((work) => ({ district: work.district, state: work.state, score: work.riskScore }));
-  res.json({ selectedRegion, metrics: { totalWorks: regionWorks.length, totalExpenditure, highRiskWorks: highRiskWorks.length, delayedWorks: regionWorks.filter((work) => work.status === 'Delayed').length, averageRiskScore: regionWorks.length ? Math.round(regionWorks.reduce((sum, work) => sum + work.riskScore, 0) / regionWorks.length) : 0 }, markers, hotspots });
 });
 
 export const getAnalytics = asyncHandler(async (req, res) => {
   const filter = {};
   ['state', 'district', 'sector', 'agency'].forEach((key) => { if (req.query[key]) filter[key] = req.query[key]; });
   const [summary] = await Work.aggregate([{ $match: filter }, { $group: { _id: null, sanctioned: { $sum: '$sanctionedAmount' }, expenditure: { $sum: '$expenditureAmount' }, avgProgress: { $avg: '$progress' }, delayed: { $sum: { $cond: [{ $eq: ['$status', 'Delayed'] }, 1, 0] } } } }]);
-  const [stateRisk, sectors] = await Promise.all([
+  const [stateRisk, sectors, trendRows, distributionRows, summaryRows, agencyPerformance] = await Promise.all([
     Work.aggregate([{ $match: filter }, { $group: { _id: '$state', value: { $avg: '$riskScore' } } }, { $sort: { value: -1 } }, { $limit: 5 }]),
     Work.aggregate([{ $match: filter }, { $group: { _id: '$sector', value: { $sum: 1 } } }, { $sort: { value: -1 } }, { $limit: 5 }]),
-  ]);
-  const [works, agencyPerformance] = await Promise.all([
-    Work.find(filter, 'sanctionedAmount expenditureAmount progress status agency state riskScore createdAt updatedAt').lean(),
+    Work.aggregate([
+      { $match: filter },
+      { $project: { month: { $dateToString: { format: '%Y-%m', date: { $ifNull: ['$updatedAt', '$createdAt'] } } }, expenditureAmount: 1, riskScore: 1 } },
+      { $group: { _id: '$month', expenditure: { $sum: '$expenditureAmount' }, riskTotal: { $sum: '$riskScore' }, count: { $sum: 1 } } },
+      { $sort: { _id: -1 } },
+      { $limit: 6 },
+      { $sort: { _id: 1 } },
+    ]),
+    Work.aggregate([
+      { $match: filter },
+      {
+        $project: {
+          bucket: {
+            $let: {
+              vars: { deviation: { $cond: [{ $gt: ['$sanctionedAmount', 0] }, { $multiply: [{ $divide: [{ $subtract: ['$expenditureAmount', '$sanctionedAmount'] }, '$sanctionedAmount'] }, 100] }, 0] } },
+              in: {
+                $switch: {
+                  branches: [
+                    { case: { $lte: ['$$deviation', 0] }, then: { range: 'Within sanction', order: 0 } },
+                    { case: { $lte: ['$$deviation', 10] }, then: { range: '0-10%', order: 1 } },
+                    { case: { $lte: ['$$deviation', 25] }, then: { range: '10-25%', order: 2 } },
+                    { case: { $lte: ['$$deviation', 50] }, then: { range: '25-50%', order: 3 } },
+                  ],
+                  default: { range: '>50%', order: 4 },
+                },
+              },
+            },
+          },
+        },
+      },
+      { $group: { _id: '$bucket.range', order: { $first: '$bucket.order' }, works: { $sum: 1 } } },
+      { $sort: { order: 1 } },
+    ]),
+    Work.aggregate([
+      { $match: filter },
+      {
+        $project: {
+          deviation: { $cond: [{ $gt: ['$sanctionedAmount', 0] }, { $multiply: [{ $divide: [{ $subtract: ['$expenditureAmount', '$sanctionedAmount'] }, '$sanctionedAmount'] }, 100] }, 0] },
+        },
+      },
+      { $group: { _id: null, totalAnalyzed: { $sum: 1 }, anomalyWorks: { $sum: { $cond: [{ $gt: ['$deviation', 10] }, 1, 0] } }, averageCostDeviation: { $avg: '$deviation' }, highestCostDeviation: { $max: '$deviation' } } },
+    ]),
     getAgencyMetrics(),
   ]);
-  const distributionBuckets = [
+  const distribution = [
     { range: 'Within sanction', min: -Infinity, max: 0 },
     { range: '0-10%', min: 0, max: 10 },
     { range: '10-25%', min: 10, max: 25 },
     { range: '25-50%', min: 25, max: 50 },
     { range: '>50%', min: 50, max: Infinity },
-  ].map((bucket) => ({ ...bucket, works: 0 }));
-  const deviations = works.map(getCostDeviation);
-  deviations.forEach((deviation) => {
-    const bucket = distributionBuckets.find((item) => deviation > item.min && deviation <= item.max) || distributionBuckets[0];
-    bucket.works += 1;
-  });
-  const anomalyDeviations = deviations.filter((deviation) => deviation > 10);
+  ].map(({ range }) => ({ range, works: distributionRows.find((item) => item._id === range)?.works || 0 }));
+  const costSummary = summaryRows[0] || { totalAnalyzed: 0, anomalyWorks: 0, averageCostDeviation: 0, highestCostDeviation: 0 };
   const data = summary || { sanctioned: 0, expenditure: 0, avgProgress: 0, delayed: 0 };
-  const trend = buildAnalyticsTrend(works);
+  const trend = trendRows.map((entry) => ({ month: monthLabel(entry._id), value: Number(entry.expenditure.toFixed(2)), volatility: Number((entry.riskTotal / entry.count).toFixed(1)) }));
   res.json({
     ...data,
     utilization: data.sanctioned ? Number(((data.expenditure / data.sanctioned) * 100).toFixed(1)) : 0,
@@ -258,12 +345,12 @@ export const getAnalytics = asyncHandler(async (req, res) => {
     volatility: trend,
     stateRisk: stateRisk.map((item) => ({ state: item._id, value: Math.round(item.value) })),
     sectors: sectors.map((item) => ({ name: item._id, value: item.value })),
-    costAnomalyDistribution: distributionBuckets.map(({ range, works: count }) => ({ range, works: count })),
+    costAnomalyDistribution: distribution,
     costAnomalySummary: {
-      totalAnalyzed: works.length,
-      anomalyWorks: anomalyDeviations.length,
-      averageCostDeviation: deviations.length ? Number((deviations.reduce((sum, value) => sum + value, 0) / deviations.length).toFixed(1)) : 0,
-      highestCostDeviation: deviations.length ? deviations.reduce((highest, value) => Math.max(highest, value), 0) : 0,
+      totalAnalyzed: costSummary.totalAnalyzed,
+      anomalyWorks: costSummary.anomalyWorks,
+      averageCostDeviation: Number((costSummary.averageCostDeviation || 0).toFixed(1)),
+      highestCostDeviation: Number((costSummary.highestCostDeviation || 0).toFixed(1)),
     },
     agencyPerformanceComparison: agencyPerformance.slice(0, 6).map((agency) => ({ agency: agency.agency, state: agency.state, delayRate: agency.delayRate, overrunRate: agency.overrunRate, incompleteMarkingRate: agency.incompleteMarkingRate })),
     insights: ['Systematic delay patterns require inspection in priority districts.', 'Cost escalation patterns were detected against peer-work benchmarks.', 'Agencies with completed works show lower risk concentration.'],
@@ -272,7 +359,6 @@ export const getAnalytics = asyncHandler(async (req, res) => {
 
 export const analyzeWithAi = asyncHandler(async (req, res) => {
   const question = String(req.body.question || 'Which states have the highest financial risk?').trim().slice(0, 500);
-  const works = await Work.find({}, 'workId title state district agency sanctionedAmount expenditureAmount progress status riskLevel riskScore alert').sort({ riskScore: -1 }).lean();
   const normalizedQuestion = question.toLowerCase();
   const requestedWorkId = question.match(/MPL-[A-Z]{2}-\d{2,4}-\d+/i)?.[0]?.toUpperCase();
   let mode = 'financial-risk';
@@ -280,41 +366,46 @@ export const analyzeWithAi = asyncHandler(async (req, res) => {
   let rankingTitle = 'Top States by Risk Concentration';
   let metricLabel = 'Risk concentration';
   let tools = ['Work Query Engine', 'Financial Anomaly Detector', 'Peer Benchmark Engine'];
-  let candidateWorks = works.filter((work) => work.riskLevel === 'high');
+  let candidateMatch = { riskLevel: 'high' };
 
   if (requestedWorkId) {
     mode = 'work-investigation'; rankingField = 'workId'; rankingTitle = 'Work Risk Assessment'; metricLabel = 'Risk score';
-    candidateWorks = works.filter((work) => work.workId === requestedWorkId);
+    candidateMatch = { workId: requestedWorkId };
     tools = ['Work Query Engine', 'Financial Anomaly Detector', 'Peer Benchmark Engine'];
   } else if (normalizedQuestion.includes('duplicate')) {
     mode = 'duplicates'; rankingTitle = 'Potential Duplicate Works by State'; metricLabel = 'Duplicate work concentration';
-    candidateWorks = works.filter((work) => /duplicate/i.test(work.alert));
+    candidateMatch = { alert: /duplicate/i };
     tools = ['Work Query Engine', 'Duplicate Pattern Detector', 'Peer Benchmark Engine'];
   } else if (normalizedQuestion.includes('delay') || normalizedQuestion.includes('delayed')) {
     mode = 'agency-delay'; rankingField = 'agency'; rankingTitle = 'Agencies with Highest Delay Rate'; metricLabel = 'Delay rate';
-    candidateWorks = works.filter((work) => work.status === 'Delayed');
+    candidateMatch = { status: 'Delayed' };
     tools = ['Work Query Engine', 'Implementation Delay Engine', 'Agency Performance Benchmark'];
   } else if (normalizedQuestion.includes('district')) {
     mode = 'district-risk'; rankingField = 'district'; rankingTitle = 'Districts with Highest High-Risk Concentration'; metricLabel = 'Risk concentration';
-    candidateWorks = works.filter((work) => work.riskLevel === 'high');
+    candidateMatch = { riskLevel: 'high' };
   } else if (normalizedQuestion.includes('expenditure') || normalizedQuestion.includes('cost') || normalizedQuestion.includes('financial')) {
     mode = 'expenditure-anomaly'; rankingTitle = 'States with Unusual Expenditure Patterns'; metricLabel = 'Expenditure anomaly rate';
-    candidateWorks = works.filter((work) => work.sanctionedAmount > 0 && (work.expenditureAmount / work.sanctionedAmount) > 1.1);
+    candidateMatch = { sanctionedAmount: { $gt: 0 }, $expr: { $gt: ['$expenditureAmount', { $multiply: ['$sanctionedAmount', 1.1] }] } };
   }
 
-  const totals = new Map();
-  works.forEach((work) => { const key = work[rankingField]; totals.set(key, (totals.get(key) || 0) + 1); });
-  const grouped = new Map();
-  candidateWorks.forEach((work) => {
-    const key = work[rankingField];
-    const entry = grouped.get(key) || { name: key, matchedWorks: 0, riskTotal: 0 };
-    entry.matchedWorks += 1; entry.riskTotal += work.riskScore; grouped.set(key, entry);
-  });
-  const rankings = [...grouped.values()]
+  const totalsPipeline = requestedWorkId ? [] : Work.aggregate([{ $group: { _id: `$${rankingField}`, totalWorks: { $sum: 1 } } }]);
+  const [totalRows, candidateRows, affectedWorks] = await Promise.all([
+    totalsPipeline,
+    Work.aggregate([
+      { $match: candidateMatch },
+      { $group: { _id: `$${rankingField}`, matchedWorks: { $sum: 1 }, riskTotal: { $sum: '$riskScore' } } },
+    ]),
+    Work.find(candidateMatch, 'workId title state district agency sanctionedAmount expenditureAmount progress status riskLevel riskScore alert')
+      .sort({ riskScore: -1 })
+      .limit(18)
+      .lean(),
+  ]);
+  const totals = new Map(totalRows.map((entry) => [entry._id, entry.totalWorks]));
+  const rankings = candidateRows
+    .map((entry) => ({ name: entry._id, matchedWorks: entry.matchedWorks, riskTotal: entry.riskTotal }))
     .map((entry) => ({ ...entry, totalWorks: totals.get(entry.name) || entry.matchedWorks, concentration: rankingField === 'workId' ? Math.round(entry.riskTotal / entry.matchedWorks) : Number(((entry.matchedWorks / (totals.get(entry.name) || entry.matchedWorks)) * 100).toFixed(1)), averageRisk: Number((entry.riskTotal / entry.matchedWorks).toFixed(1)) }))
     .sort((a, b) => b.concentration - a.concentration || b.matchedWorks - a.matchedWorks)
     .slice(0, 5);
-  const affectedWorks = candidateWorks.slice(0, 18);
   const districts = new Set(affectedWorks.map((work) => work.district));
   const anomalyCategories = new Set(affectedWorks.map((work) => work.alert || 'Elevated risk profile'));
   const topNames = rankings.slice(0, 2).map((item) => item.name).join(' and ') || 'the available records';
