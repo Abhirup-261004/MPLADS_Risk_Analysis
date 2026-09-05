@@ -19,6 +19,13 @@ export const getWorks = asyncHandler(async (req, res) => {
   res.json({ works, pagination: { page: safePage, limit: safeLimit, total, totalPages: Math.ceil(total / safeLimit) } });
 });
 
+export const getFilterOptions = asyncHandler(async (req, res) => {
+  const [states, districts, sectors, agencies] = await Promise.all([
+    Work.distinct('state'), Work.distinct('district'), Work.distinct('sector'), Work.distinct('agency'),
+  ]);
+  res.json({ states: states.filter(Boolean).sort(), districts: districts.filter(Boolean).sort(), sectors: sectors.filter(Boolean).sort(), agencies: agencies.filter(Boolean).sort() });
+});
+
 export const getWorkById = asyncHandler(async (req, res) => {
   const work = await Work.findOne({ workId: req.params.workId }).lean();
   if (!work) return res.status(404).json({ message: 'Work not found.' });

@@ -36,12 +36,17 @@ async function sendProtected(path, options = {}) {
 }
 
 export const getDashboardOverview = () => getProtected('/dashboard/overview');
-export const getWorks = (search = '') => getProtected(`/works?limit=25&search=${encodeURIComponent(search)}`);
+export const getWorks = (params = {}) => {
+  const options = typeof params === 'string' ? { search: params } : params;
+  const query = new URLSearchParams({ limit: '25', ...Object.fromEntries(Object.entries(options).filter(([, value]) => value)) });
+  return getProtected(`/works?${query.toString()}`);
+};
+export const getFilterOptions = () => getProtected('/works/filters');
 export const getRiskCenter = () => getProtected('/risk/center');
-export const getAnalytics = () => getProtected('/risk/analytics');
+export const getAnalytics = (params = {}) => getProtected(`/risk/analytics?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, value]) => value))).toString()}`);
 export const getAgencyRisk = () => getProtected('/risk/agencies');
 export const getAgencyRiskProfile = (agencyKey) => getProtected(`/risk/agencies/${agencyKey}`);
-export const getMapIntelligence = () => getProtected('/risk/map-intelligence');
+export const getMapIntelligence = (state = '') => getProtected(`/risk/map-intelligence${state ? `?state=${encodeURIComponent(state)}` : ''}`);
 export const getWork = (workId) => getProtected(`/works/${encodeURIComponent(workId)}`);
 export const getCurrentUser = () => getProtected('/auth/me');
 export const updateProfile = (profile) => sendProtected('/auth/profile', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profile) });

@@ -225,13 +225,15 @@ export const getMapIntelligence = asyncHandler(async (req, res) => {
 });
 
 export const getAnalytics = asyncHandler(async (req, res) => {
-  const [summary] = await Work.aggregate([{ $group: { _id: null, sanctioned: { $sum: '$sanctionedAmount' }, expenditure: { $sum: '$expenditureAmount' }, avgProgress: { $avg: '$progress' }, delayed: { $sum: { $cond: [{ $eq: ['$status', 'Delayed'] }, 1, 0] } } } }]);
+  const filter = {};
+  ['state', 'district', 'sector', 'agency'].forEach((key) => { if (req.query[key]) filter[key] = req.query[key]; });
+  const [summary] = await Work.aggregate([{ $match: filter }, { $group: { _id: null, sanctioned: { $sum: '$sanctionedAmount' }, expenditure: { $sum: '$expenditureAmount' }, avgProgress: { $avg: '$progress' }, delayed: { $sum: { $cond: [{ $eq: ['$status', 'Delayed'] }, 1, 0] } } } }]);
   const [stateRisk, sectors] = await Promise.all([
-    Work.aggregate([{ $group: { _id: '$state', value: { $avg: '$riskScore' } } }, { $sort: { value: -1 } }, { $limit: 5 }]),
-    Work.aggregate([{ $group: { _id: '$sector', value: { $sum: 1 } } }, { $sort: { value: -1 } }, { $limit: 5 }]),
+    Work.aggregate([{ $match: filter }, { $group: { _id: '$state', value: { $avg: '$riskScore' } } }, { $sort: { value: -1 } }, { $limit: 5 }]),
+    Work.aggregate([{ $match: filter }, { $group: { _id: '$sector', value: { $sum: 1 } } }, { $sort: { value: -1 } }, { $limit: 5 }]),
   ]);
   const [works, agencyPerformance] = await Promise.all([
-    Work.find({}, 'sanctionedAmount expenditureAmount progress status agency state riskScore').lean(),
+    Work.find(filter, 'sanctionedAmount expenditureAmount progress status agency state riskScore createdAt updatedAt').lean(),
     getAgencyMetrics(),
   ]);
   const distributionBuckets = [
@@ -261,7 +263,7 @@ export const getAnalytics = asyncHandler(async (req, res) => {
       totalAnalyzed: works.length,
       anomalyWorks: anomalyDeviations.length,
       averageCostDeviation: deviations.length ? Number((deviations.reduce((sum, value) => sum + value, 0) / deviations.length).toFixed(1)) : 0,
-      highestCostDeviation: deviations.length ? Math.max(...deviations) : 0,
+      highestCostDeviation: deviations.length ? deviations.reduce((highest, value) => Math.max(highest, value), 0) : 0,
     },
     agencyPerformanceComparison: agencyPerformance.slice(0, 6).map((agency) => ({ agency: agency.agency, state: agency.state, delayRate: agency.delayRate, overrunRate: agency.overrunRate, incompleteMarkingRate: agency.incompleteMarkingRate })),
     insights: ['Systematic delay patterns require inspection in priority districts.', 'Cost escalation patterns were detected against peer-work benchmarks.', 'Agencies with completed works show lower risk concentration.'],
