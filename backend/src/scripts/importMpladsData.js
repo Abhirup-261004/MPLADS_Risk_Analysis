@@ -13,20 +13,23 @@ const sources = [
   ['recommended-works', 'recommended-works.csv'], ['state-wise-allocation', 'state-wise-allocation.csv'],
 ];
 
-function parseLine(line) {
-  const values = []; let value = ''; let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === '"' && line[index + 1] === '"') { value += '"'; index += 1; } else if (character === '"') quoted = !quoted;
-    else if (character === ',' && !quoted) { values.push(value); value = ''; } else value += character;
-  }
-  values.push(value); return values;
-}
-
 function readCsv(filename) {
-  const lines = fs.readFileSync(path.join(dataDirectory, filename), 'utf8').split(/\r?\n/).filter(Boolean);
-  const headers = parseLine(lines.shift()).map((header) => header.replace(/^\uFEFF/, '').trim());
-  return lines.map((line) => Object.fromEntries(headers.map((header, index) => [header, parseLine(line)[index] ?? ''])));
+  const content = fs.readFileSync(path.join(dataDirectory, filename), 'utf8');
+  const rows = []; let row = []; let value = ''; let quoted = false;
+  for (let index = 0; index < content.length; index += 1) {
+    const character = content[index];
+    if (character === '"' && content[index + 1] === '"') { value += '"'; index += 1; continue; }
+    if (character === '"') { quoted = !quoted; continue; }
+    if (character === ',' && !quoted) { row.push(value); value = ''; continue; }
+    if ((character === '\n' || character === '\r') && !quoted) {
+      if (character === '\r' && content[index + 1] === '\n') index += 1;
+      row.push(value); value = ''; if (row.some((cell) => cell !== '')) rows.push(row); row = []; continue;
+    }
+    value += character;
+  }
+  if (value || row.length) { row.push(value); rows.push(row); }
+  const headers = (rows.shift() || []).map((header) => header.replace(/^\uFEFF/, '').trim());
+  return rows.map((cells) => Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ''])));
 }
 
 function amount(value) { return Number(String(value || '0').replaceAll(',', '').replace(/[^0-9.-]/g, '')) || 0; }
