@@ -7,6 +7,7 @@ const items = [
   ['agency', 'Agency Risk', '\u2302'],
   ['ai', 'AI Analyst', '\u25c9'],
   ['notifications', 'Notifications', '!'],
+  ['data-refresh', 'Data Refresh', '↻'],
   ['reports', 'Reports & Export', '\u25a4'],
   ['map', 'Map Intelligence', '\u2316'],
   ['analytics', 'Analytics', '\u25a4'],

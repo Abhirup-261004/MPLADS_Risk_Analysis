@@ -8,6 +8,7 @@ import { worksRouter } from './routes/worksRoutes.js';
 import { riskRouter } from './routes/riskRoutes.js';
 import { reportRouter } from './routes/reportRoutes.js';
 import { notificationRouter } from './routes/notificationRoutes.js';
+import { dataRefreshRouter } from './routes/dataRefreshRoutes.js';
 
 export const app = express();
 app.use(cors({ origin: env.clientUrl }));
@@ -19,5 +20,6 @@ app.use('/api/works', worksRouter);
 app.use('/api/risk', riskRouter);
 app.use('/api/reports', reportRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/api/data-refresh', dataRefreshRouter);
 app.use(notFound);
 app.use(errorHandler);

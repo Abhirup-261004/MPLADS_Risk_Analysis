@@ -62,6 +62,7 @@ export async function runAiAnalysis(question) {
 }
 
 export const getReports = () => getProtected('/reports');
+export const getDataRefreshOverview = () => getProtected('/data-refresh/overview');
 export const getNotifications = (params = {}) => {
   const searchParams = new URLSearchParams();
   Object.entries({ page: 1, limit: 20, ...params }).forEach(([key, value]) => {

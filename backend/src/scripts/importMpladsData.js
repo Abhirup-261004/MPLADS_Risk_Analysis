@@ -4,14 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { connectDatabase } from '../config/database.js';
 import { DatasetRecord } from '../models/DatasetRecord.js';
 import { Work } from '../models/Work.js';
+import { ImportRun } from '../models/ImportRun.js';
+import { dataSources } from '../config/dataSources.js';
 
 const dataDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
-const sources = [
-  ['mp-allocations-lok-sabha', 'mp-allocations-lok-sabha.csv'], ['mp-allocations-rajya-sabha', 'mp-allocations-rajya-sabha.csv'],
-  ['calamity-consents-lok-sabha', 'calamity-consents-lok-sabha.csv'], ['calamity-consents-rajya-sabha', 'calamity-consents-rajya-sabha.csv'],
-  ['completed-works', 'completed-works.csv'], ['expenditures', 'expenditures.csv'], ['mp-summary', 'mp-summary.csv'],
-  ['recommended-works', 'recommended-works.csv'], ['state-wise-allocation', 'state-wise-allocation.csv'],
-];
 
 function readCsv(filename) {
   const content = fs.readFileSync(path.join(dataDirectory, filename), 'utf8');
@@ -53,7 +49,7 @@ async function main() {
   const replace = process.argv.includes('--replace');
   await connectDatabase();
   if (replace) { await Promise.all([DatasetRecord.deleteMany({}), Work.deleteMany({})]); }
-  for (const [source, filename] of sources) {
+  for (const { key: source, file: filename } of dataSources) {
     const rows = readCsv(filename); let operations = [];
     for (let index = 0; index < rows.length; index += 1) {
       operations.push({ updateOne: { filter: { source, recordId: String(index) }, update: { $set: { source, recordId: String(index), data: rows[index] } }, upsert: true } });
@@ -64,6 +60,7 @@ async function main() {
       operations = rows.map((row, index) => { const work = workFromRow(row, source, index); return { updateOne: { filter: { workId: work.workId }, update: { $set: work }, upsert: true } }; });
       while (operations.length) await bulkUpsert(Work, operations.splice(0, 1000));
     }
+    await ImportRun.create({ source, importedRows: rows.length, failedRows: 0, status: 'healthy', message: 'Import completed successfully.' });
     console.log(`Imported ${rows.length} rows from ${filename}`);
   }
   console.log('MPLADS data import completed.'); process.exit(0);
