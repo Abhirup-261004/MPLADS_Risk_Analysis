@@ -7,6 +7,8 @@ import AgencyRisk from './components/AgencyRisk.jsx';
 import MapIntelligence from './components/MapIntelligence.jsx';
 import AiAnalyst from './components/AiAnalyst.jsx';
 import ReportsExport from './components/ReportsExport.jsx';
+import Notifications from './components/Notifications.jsx';
+import SettingsProfile from './components/SettingsProfile.jsx';
 import SideNavbar from './components/SideNavbar.jsx';
 import Logo from './components/Logo.jsx';
 import { getDashboardOverview, getWorks, login, register } from './services/api.js';
@@ -34,6 +36,22 @@ function getStoredUser() {
   }
 }
 
+function routeFromHash() {
+  const hash = window.location.hash.replace(/^#\/?/, '');
+  if (!hash) return { page: 'home', agencyKey: null };
+  const [path, ...rest] = hash.split('/');
+  if (path === 'agency-risk' && rest.length) return { page: 'agency', agencyKey: rest.join('/') };
+  if (path === 'agency-risk') return { page: 'agency', agencyKey: null };
+  const validPages = new Set(['home', 'risk', 'works', 'agency', 'ai', 'notifications', 'reports', 'map', 'analytics', 'settings']);
+  return { page: validPages.has(path) ? path : 'home', agencyKey: null };
+}
+
+function hashForPage(nextPage, agencyKey = null) {
+  if (nextPage === 'agency' && agencyKey) return `#/agency-risk/${agencyKey}`;
+  if (nextPage === 'agency') return '#/agency-risk';
+  return `#/${nextPage}`;
+}
+
 export default function App() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState('');
@@ -44,10 +62,12 @@ export default function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(getStoredUser);
-  const [page, setPage] = useState('home');
+  const initialRoute = routeFromHash();
+  const [page, setPage] = useState(initialRoute.page);
   const [overview, setOverview] = useState(null);
   const [works, setWorks] = useState(null);
   const [selectedWorkId, setSelectedWorkId] = useState(null);
+  const [selectedAgencyKey, setSelectedAgencyKey] = useState(initialRoute.agencyKey);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -59,6 +79,16 @@ export default function App() {
       .catch(() => { if (active) { setOverview(null); setWorks(null); } });
     return () => { active = false; };
   }, [user]);
+
+  useEffect(() => {
+    function syncRoute() {
+      const route = routeFromHash();
+      setPage(route.page);
+      setSelectedAgencyKey(route.agencyKey);
+    }
+    window.addEventListener('hashchange', syncRoute);
+    return () => window.removeEventListener('hashchange', syncRoute);
+  }, []);
 
   async function handleSubmit(event) {
     event.preventDefault(); setError(''); setLoading(true);
@@ -82,19 +112,34 @@ export default function App() {
     setConfirmPassword('');
   }
 
-  function signOut() { localStorage.removeItem('prahari_token'); localStorage.removeItem('prahari_user'); setUser(null); setPage('home'); setPassword(''); }
+  function navigate(nextPage) {
+    window.location.hash = hashForPage(nextPage);
+  }
+
+  function openAgency(agencyKey) {
+    window.location.hash = hashForPage('agency', agencyKey);
+  }
+
+  function closeAgency() {
+    window.location.hash = hashForPage('agency');
+  }
+
+  function signOut() { localStorage.removeItem('prahari_token'); localStorage.removeItem('prahari_user'); setUser(null); setPage('home'); setSelectedAgencyKey(null); setPassword(''); window.location.hash = ''; }
+  function updateStoredUser(nextUser) { localStorage.setItem('prahari_user', JSON.stringify(nextUser)); setUser(nextUser); }
 
   if (user) {
     let content;
-    if (page === 'investigation' && selectedWorkId) content = <WorkInvestigation workId={selectedWorkId} user={user} onSignOut={signOut} onNavigate={setPage} />;
+    if (page === 'investigation' && selectedWorkId) content = <WorkInvestigation workId={selectedWorkId} user={user} onSignOut={signOut} onNavigate={navigate} />;
     else if (page === 'risk') content = <RiskCenter />;
     else if (page === 'ai') content = <AiAnalyst onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} />;
     else if (page === 'reports') content = <ReportsExport />;
+    else if (page === 'notifications') content = <Notifications user={user} onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} />;
+    else if (page === 'settings') content = <SettingsProfile user={user} onUserUpdate={updateStoredUser} />;
     else if (page === 'analytics') content = <RiskCenter analyticsOnly />;
-    else if (page === 'agency') content = <AgencyRisk />;
+    else if (page === 'agency') content = <AgencyRisk agencyKey={selectedAgencyKey} onOpenAgency={openAgency} onBack={closeAgency} />;
     else if (page === 'map') content = <MapIntelligence onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} />;
-    else content = page === 'works' ? <WorksExplorer user={user} works={works} onSignOut={signOut} onNavigate={setPage} onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} /> : <Dashboard user={user} overview={overview} onSignOut={signOut} onNavigate={setPage} />;
-    return <div className="authenticated-shell"><SideNavbar page={page === 'investigation' ? 'works' : page} onNavigate={setPage} onSignOut={signOut} />{content}</div>;
+    else content = page === 'works' ? <WorksExplorer user={user} works={works} onSignOut={signOut} onNavigate={navigate} onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} /> : <Dashboard user={user} overview={overview} onSignOut={signOut} onNavigate={navigate} />;
+    return <div className="authenticated-shell"><SideNavbar page={page === 'investigation' ? 'works' : page} onNavigate={navigate} onSignOut={signOut} />{content}</div>;
   }
 
   return <main className="portal-page">
