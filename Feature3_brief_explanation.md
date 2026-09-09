@@ -1,8 +1,18 @@
-Feature 3 recovers a usable, structured category taxonomy from the raw, free-text `Work Description` fields.Because over 97%
+Feature 3: NLP-Driven Work Categorization & Category-Mismatch Detection recovers a usable, structured category taxonomy from the raw, free-text `Work Description` fields.Because over 97%
 of the dataset's declared `Work Category` values are unhelpfully logged as "Normal/Others," this feature uses a multilingual
 AI pipeline (Sentence Transformers + UMAP + HDBSCAN + LightGBM) to automatically assign every project to one of 11 distinct
 physical infrastructure categories (e.g., *Roads*, *Drinking Water*, *Schools*), leaving ambiguous projects as
 *Unclassified*.
+
+How does it analyze risk?1
+
+It detects risk through Category-Mismatch Detection. The pipeline compares the AI-derived category (category_nlp) against the original declared category (category_raw). If the model confidently predicts a work is a “Road,” but the official record filed it under “Trust and Society” or “Repair and Renovation,” it raises a category_mismatch_flag. This surfaces potential clerical errors, deliberate miscoding, or attempts to obscure the true nature of an asset.3. How does it contribute to other features?1
+
+Feature 3 is a foundational prerequisite for the entire ML architecture.
+
+Feature 1 (Disbursement Shortfall) & Feature 2 (Cost Benchmarking): Both rely on comparing a project’s cost and progress against its “peers.” Without Feature 3's category_nlp, these models couldn't compare a road to other roads; they would be forced to compare it to the national average of all generic “Normal/Others” projects, completely invalidating the statistical baselines.
+
+Feature 4 (Duplicate Work Detection): Directly reuses the dense text embeddings generated in this feature to calculate cosine similarity and flag duplicate billing or structuring.
 
 The 11 distinct physical infrastructure categories were meant to be field expert input providing the "Human in loop" we 
 needed but as it is not possible in this timeframe i have resided to predefine the categories ,this does effect practical
