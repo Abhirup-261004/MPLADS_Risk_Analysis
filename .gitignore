@@ -2,6 +2,9 @@
 node_modules/
 dist/
 coverage/
+__pycache__/
+*.pyc
+.pytest_cache/
 
 # Local configuration and secrets
 .env
@@ -10,3 +13,11 @@ coverage/
 
 # Operating system files
 .DS_Store
+
+# Exclude heavy offline training models (>100MB)
+feature3_artifacts/feature3_umap.joblib
+feature3_artifacts/feature3_sentence_transformer/
+
+# Exclude redundant large CSVs (Parquet files used in production)
+*.csv
+

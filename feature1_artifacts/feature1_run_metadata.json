@@ -1,0 +1,35 @@
+{
+  "feature_name": "Feature 1: Fund Disbursement Shortfall & Completion Integrity Score (with Isolation Forest ML)",
+  "created_at_utc": "2026-09-09T07:11:05.046808+00:00",
+  "total_works_processed": 43150,
+  "coverage_breakdown": {
+    "linked": 29013,
+    "disbursement_unknown": 14137
+  },
+  "risk_tier_counts": {
+    "Low": 27763,
+    "Unknown / Unlinked": 14137,
+    "High": 581,
+    "Medium": 550,
+    "Critical": 119
+  },
+  "critical_completion_anomalies_count": 9,
+  "isolation_forest": {
+    "n_estimators": 100,
+    "contamination": 0.03,
+    "features_used": [
+      "shortfall_deficit_pct",
+      "tranche_count_clean",
+      "days_sanction_to_last_tranche",
+      "work_status_ordinal",
+      "log_sanction_amount"
+    ],
+    "model_artifact": "/content/drive/MyDrive/MPLADs/feature1_artifacts/feature1_isolation_forest.joblib"
+  },
+  "output_artifacts": {
+    "enriched_dataset_csv": "/content/drive/MyDrive/MPLADs/feature1_artifacts/feature1_fact_work_disbursement_risk.csv",
+    "high_risk_worklist_csv": "/content/drive/MyDrive/MPLADs/feature1_artifacts/feature1_disbursement_risk_worklist.csv",
+    "canonical_shared_fact_work_csv": "/content/drive/MyDrive/MPLADs/shared_preprocessing_artifacts/fact_work_feature1.csv",
+    "visualization_png": "/content/drive/MyDrive/MPLADs/feature1_artifacts/feature1_shortfall_distribution.png"
+  }
+}

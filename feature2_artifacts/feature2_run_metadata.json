@@ -1,0 +1,26 @@
+{
+  "feature": "Feature 2 - Cost Benchmarking & Sanction-Amount Anomaly Detection",
+  "run_timestamp": "2026-09-09T09:02:29.161349",
+  "total_records_processed": 43150,
+  "valid_cost_records": 34000,
+  "unique_peer_groups": 301,
+  "risk_tier_counts": {
+    "Low": 29493,
+    "Unknown / Invalid": 9150,
+    "Medium": 1910,
+    "High": 1698,
+    "Critical": 899
+  },
+  "lof_parameters": {
+    "n_neighbors": 20,
+    "contamination": 0.03,
+    "novelty": true
+  },
+  "exported_artifacts": [
+    "fact_work_feature2.parquet",
+    "feature2_fact_work_cost_risk.parquet",
+    "feature2_cost_risk_worklist.csv",
+    "feature2_lof_model.joblib",
+    "feature2_cost_distribution.png"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "feature": "Feature 5 - Vendor Concentration Risk",
+  "timestamp_utc": "2026-09-09T10:56:45.024112+00:00",
+  "total_vendors_processed": 9167,
+  "active_vendors_processed": 2552,
+  "risk_tier_distribution": {
+    "Low Volume / Unrated": 6615,
+    "Medium": 1900,
+    "High": 331,
+    "Low": 180,
+    "Critical": 141
+  },
+  "artifacts": {
+    "vendor_risk_csv": "/content/drive/MyDrive/MPLADs/feature5_artifacts/feature5_vendor_risk.csv",
+    "vendor_risk_parquet": "/content/drive/MyDrive/MPLADs/feature5_artifacts/feature5_vendor_risk.parquet",
+    "vendor_worklist_csv": "/content/drive/MyDrive/MPLADs/feature5_artifacts/feature5_vendor_risk_worklist.csv",
+    "plot_distribution": "/content/drive/MyDrive/MPLADs/feature5_artifacts/feature5_vendor_concentration_distribution.png",
+    "iforest_model": "/content/drive/MyDrive/MPLADs/feature5_artifacts/feature5_isolation_forest.joblib"
+  }
+}

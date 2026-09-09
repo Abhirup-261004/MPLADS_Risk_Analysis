@@ -1,0 +1,168 @@
+{
+  "feature": "NLP-Driven Work Categorization & Category-Mismatch Detection",
+  "created_at_utc": "2026-09-08T19:19:14.844856+00:00",
+  "input_source": "shared_preprocessing_artifacts/fact_work",
+  "embedding_model": "paraphrase-multilingual-MiniLM-L12-v2",
+  "embedding_device": "cpu",
+  "umap": {
+    "n_components": 15,
+    "n_neighbors": 30,
+    "min_dist": 0.0
+  },
+  "hdbscan": {
+    "min_cluster_size": 30,
+    "min_samples": 10
+  },
+  "classifier": "TF-IDF + LightGBM when at least two reliable categories exist; prototype fallback otherwise",
+  "classifier_available": true,
+  "taxonomy_version": "c0163441e8b5",
+  "taxonomy_labels": [
+    "Road & Pathway Infrastructure",
+    "Street Lighting & Solar Energy",
+    "Drinking Water Infrastructure",
+    "Sanitation & Drainage",
+    "School & Education Infrastructure",
+    "Healthcare & Ambulance Services",
+    "Community & Public Buildings",
+    "Agriculture & Irrigation",
+    "Sports & Recreation",
+    "Religious & Cultural Infrastructure",
+    "Other Public Infrastructure",
+    "Unclassified"
+  ],
+  "prototype_semantic_weight": 0.7,
+  "prototype_keyword_weight": 0.3,
+  "prototype_confidence_threshold": 0.55,
+  "cluster_count_non_noise": 304,
+  "noise_rate": 0.25780079388028704,
+  "category_confidence_threshold": 0.55,
+  "mismatch_confidence_threshold": 0.7,
+  "provisional_taxonomy": {
+    "Road & Pathway Infrastructure": {
+      "prototype": "construction and repair of roads pathways paver blocks bridges culverts and approach roads",
+      "keywords": [
+        "road",
+        "pathway",
+        "paver",
+        "culvert",
+        "bridge",
+        "cc road",
+        "cement road"
+      ]
+    },
+    "Street Lighting & Solar Energy": {
+      "prototype": "street lights solar lights high mast lights LED lights and public lighting",
+      "keywords": [
+        "light",
+        "lighting",
+        "solar",
+        "led",
+        "high mast",
+        "street lamp"
+      ]
+    },
+    "Drinking Water Infrastructure": {
+      "prototype": "drinking water supply hand pumps bore wells pipelines pumping machinery and water distribution",
+      "keywords": [
+        "drinking water",
+        "water supply",
+        "hand pump",
+        "borewell",
+        "bore well",
+        "pipeline",
+        "pumping"
+      ]
+    },
+    "Sanitation & Drainage": {
+      "prototype": "drainage sewer sanitation toilets and waste management infrastructure",
+      "keywords": [
+        "drain",
+        "drainage",
+        "sewer",
+        "toilet",
+        "sanitation",
+        "waste"
+      ]
+    },
+    "School & Education Infrastructure": {
+      "prototype": "school classroom education college library laboratory and educational infrastructure",
+      "keywords": [
+        "school",
+        "classroom",
+        "college",
+        "library",
+        "laboratory",
+        "education"
+      ]
+    },
+    "Healthcare & Ambulance Services": {
+      "prototype": "hospital health centre medical equipment ambulance and healthcare infrastructure",
+      "keywords": [
+        "hospital",
+        "health",
+        "medical",
+        "ambulance",
+        "clinic",
+        "healthcare"
+      ]
+    },
+    "Community & Public Buildings": {
+      "prototype": "community hall public building shelter office and civic infrastructure",
+      "keywords": [
+        "community hall",
+        "community center",
+        "building",
+        "shelter",
+        "public hall",
+        "anganwadi"
+      ]
+    },
+    "Agriculture & Irrigation": {
+      "prototype": "irrigation agriculture farm water harvesting and rural agricultural infrastructure",
+      "keywords": [
+        "irrigation",
+        "agriculture",
+        "farm",
+        "canal",
+        "check dam",
+        "harvesting"
+      ]
+    },
+    "Sports & Recreation": {
+      "prototype": "sports ground playground stadium and recreation facilities",
+      "keywords": [
+        "sport",
+        "playground",
+        "stadium",
+        "gym",
+        "recreation",
+        "ground"
+      ]
+    },
+    "Religious & Cultural Infrastructure": {
+      "prototype": "religious cultural heritage and public cultural facilities",
+      "keywords": [
+        "temple",
+        "mandir",
+        "mosque",
+        "church",
+        "cultural",
+        "heritage"
+      ]
+    },
+    "Other Public Infrastructure": {
+      "prototype": "other eligible public infrastructure and civic works",
+      "keywords": [
+        "public",
+        "civic",
+        "infrastructure"
+      ]
+    }
+  },
+  "row_counts": {
+    "fact_work": 43150,
+    "usable_descriptions": 43150,
+    "assigned_categories": 43150,
+    "mismatch_flags": 745
+  }
+}
