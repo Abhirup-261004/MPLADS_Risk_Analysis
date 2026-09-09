@@ -6,9 +6,7 @@ This repository contains the machine learning models, anomaly detection algorith
 
 ## 📋 Table of Contents
 1. [Quick Start: How Teammates Can Access ML Models](#-how-teammates-can-access-ml-models)
-   - [Method 1: Interactive FastAPI REST API (Recommended)](#method-1-interactive-fastapi-rest-api-recommended)
-   - [Method 2: Programmatic Python Access via `FeatureStore`](#method-2-programmatic-python-access-via-featurestore)
-   - [Method 3: Direct `.joblib` Binary & `.parquet` Data Store Access](#method-3-direct-joblib-binary--parquet-data-store-access)
+   - [Interactive FastAPI REST API (Recommended)](#method-1-interactive-fastapi-rest-api-recommended)
 2. [ML Model Artifacts & Directory Structure](#-ml-model-artifacts--directory-structure)
 3. [API Endpoints Overview](#-api-endpoints-overview)
 4. [Running Unit Tests](#-running-unit-tests)
