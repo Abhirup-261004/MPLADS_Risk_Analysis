@@ -20,7 +20,7 @@ This repository contains the machine learning models, anomaly detection algorith
 
 Teammates can access and consume trained ML models using three simple methods depending on their workflow:
 
-### Method 1: Interactive FastAPI REST API (Recommended)
+### Interactive FastAPI REST API (Recommended)
 
 Start the Python FastAPI server to serve live model predictions and anomaly scores:
 
@@ -66,60 +66,6 @@ Once running, open **[http://localhost:8000/docs](http://localhost:8000/docs)** 
 
 ---
 
-### Method 2: Programmatic Python Access via `FeatureStore`
-
-If you are developing custom Python scripts, Jupyter Notebooks, or data pipelines, use the `FeatureStore` singleton to access loaded model objects and indexed feature data instantly:
-
-```python
-from mplads_api.core.feature_store import FeatureStore
-
-# Initialize & load all trained models and indexed feature tables
-store = FeatureStore.get_instance()
-store.load_all()
-
-# --- 1. Access Loaded Model Objects (.joblib) ---
-nlp_model  = store.nlp_classifier  # Feature 3 TF-IDF + LightGBM Classifier
-f1_iforest = store.f1_iforest     # Feature 1 Isolation Forest (Disbursement Risk)
-f2_lof     = store.f2_lof         # Feature 2 Local Outlier Factor (Cost Anomaly)
-f5_iforest = store.f5_iforest     # Feature 5 Isolation Forest (Vendor Risk)
-f7_kmeans  = store.f7_kmeans      # Feature 7 K-Means (MP Risk Clustering)
-f7_iforest = store.f7_iforest     # Feature 7 Isolation Forest (MP Scorecard Anomaly)
-
-# --- 2. Query In-Memory Fast Lookup Indexes ---
-# Search Work Record by work_id or work_key
-work_info = store.work_index.get("WS/LS/17/001")
-
-# Search MP Record using Name Resolution
-record, candidates = store.resolve_mp("Sanjay Seth", house="LS")
-print(record["composite_risk_score"], record["risk_tier"])
-
-# Search Vendor Risk Record
-vendor_info = store.vendor_index.get("VEND_00123")
-
-# Search State Risk Rollup
-state_info = store.state_index.get("JHARKHAND")
-```
-
----
-
-### Method 3: Direct `.joblib` Binary & `.parquet` Data Store Access
-
-Model binaries and compressed feature tables are organized cleanly by feature module in the repository root:
-
-```python
-import joblib
-import pandas as pd
-
-# Load any trained model binary directly:
-f1_model = joblib.load("feature1_artifacts/feature1_isolation_forest.joblib")
-f2_model = joblib.load("feature2_artifacts/feature2_lof_model.joblib")
-nlp_clf  = joblib.load("feature3_artifacts/feature3_tfidf_lightgbm_classifier.joblib")
-
-# Read Parquet feature store tables directly:
-mp_scorecard = pd.read_parquet("feature7_artifacts/feature7_mp_composite_risk.parquet")
-work_features = pd.read_parquet("shared_preprocessing_artifacts/fact_work_feature7.parquet")
-vendor_risk   = pd.read_parquet("feature5_artifacts/feature5_vendor_risk.parquet")
-```
 
 ---
 
@@ -164,13 +110,7 @@ MPLADs_ML/
 
 ---
 
-## 🧪 Running Unit Tests
 
-To verify that all models, feature stores, and API routers are working properly:
-
-```powershell
-python -m pytest mplads_api/tests/ -v
-```
 
 ---
 
