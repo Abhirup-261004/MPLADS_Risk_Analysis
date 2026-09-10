@@ -9,12 +9,12 @@ This repository contains the machine learning models, anomaly detection algorith
 ```text
 React/Vite Frontend (Port 5173)
         ↓  (Authenticated HTTP / JSON via /api/ml/...)
-Express Backend (Port 5000)
+Express Backend (Port 5001)
         ↓  (Server-to-Server Native fetch)
 FastAPI ML Service (Port 8000)
 ```
 
-- **Client Isolation**: The browser **MUST NOT** and **DOES NOT** call FastAPI directly. The browser exclusively communicates with the Express backend (`http://localhost:5000/api`).
+- **Client Isolation**: The browser **MUST NOT** and **DOES NOT** call FastAPI directly. The browser exclusively communicates with the Express backend (`http://localhost:5001/api`).
 - **Secure ML Proxy**: Express exposes authenticated routes under `/api/ml/*` protected by existing JWT authentication middleware.
 - **How React Reaches ML**:
   1. React components call service functions in `frontend/src/services/api.js`.
@@ -49,7 +49,7 @@ Teammates can access and consume trained ML models using three simple methods de
 See `backend/.env.example` for reference:
 ```env
 NODE_ENV=development
-PORT=5000
+PORT=5001
 MONGODB_URI=mongodb://127.0.0.1:27017/prahari-ai
 JWT_SECRET=replace_with_a_long_random_secret_at_least_32_characters
 JWT_EXPIRES_IN=7d
@@ -62,7 +62,7 @@ ML_API_URL=http://localhost:8000
 ### 2. React Frontend (`frontend/.env`)
 See `frontend/.env.example` for reference:
 ```env
-VITE_API_URL=http://localhost:5000/api
+VITE_API_URL=http://localhost:5001/api
 ```
 > The browser only knows the Express backend API URL.
 
@@ -85,13 +85,13 @@ python -m uvicorn mplads_api.main:app --reload --host 0.0.0.0 --port 8000
 FastAPI Swagger documentation is available at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 Once running, open **[http://localhost:8000/docs](http://localhost:8000/docs)** in your browser to test endpoints interactively via Swagger UI.
-### Step 2: Start Express Backend (Port 5000)
+### Step 2: Start Express Backend (Port 5001)
 ```powershell
 cd backend
 npm install
 npm run dev
 ```
-Express runs on port `5000` (or the configured `PORT`) and proxies ML calls to `http://localhost:8000`.
+Express runs on port `5001` (or the configured `PORT`) and proxies ML calls to `http://localhost:8000`.
 
 #### Quick REST API Examples:
 ### Step 3: Start React / Vite Frontend (Port 5173)
@@ -145,7 +145,7 @@ Authenticate first to obtain a JWT token, then query the proxy:
 
 ```powershell
 # Authenticate
-$authResponse = Invoke-RestMethod -Uri "http://localhost:5000/api/auth/login" `
+$authResponse = Invoke-RestMethod -Uri "http://localhost:5001/api/auth/login" `
   -Method Post `
   -ContentType "application/json" `
   -Body '{"email":"admin@prahariai.com","password":"ChangeThisPassword123!"}'
@@ -153,14 +153,14 @@ $authResponse = Invoke-RestMethod -Uri "http://localhost:5000/api/auth/login" `
 $token = $authResponse.token
 
 # Test Work Categorization through Express Proxy
-Invoke-RestMethod -Uri "http://localhost:5000/api/ml/categorize-work" `
+Invoke-RestMethod -Uri "http://localhost:5001/api/ml/categorize-work" `
   -Method Post `
   -Headers @{ Authorization = "Bearer $token" } `
   -ContentType "application/json" `
   -Body '{"description":"Installation of 500W Solar Street Lights in Gram Panchayat","declared_category":"Normal/Others"}'
 
 # Test MP Composite Risk (preserves query params like house and state)
-Invoke-RestMethod -Uri "http://localhost:5000/api/ml/mp-risk/Sanjay%20Seth?house=LS" `
+Invoke-RestMethod -Uri "http://localhost:5001/api/ml/mp-risk/Sanjay%20Seth?house=LS" `
   -Method Get `
   -Headers @{ Authorization = "Bearer $token" }
 ```
@@ -207,7 +207,7 @@ MPLADS_Risk_Analysis/
 ├── context/                        <-- Technical feature documentation & mathematical details
 ├── backend/                        <-- Express + MongoDB Authentication API
 ├── frontend/                       <-- React + Vite User Interface
-├── backend/                        <-- Express + MongoDB Backend & ML Proxy (Port 5000)
+├── backend/                        <-- Express + MongoDB Backend & ML Proxy (Port 5001)
 │   ├── src/controllers/mlController.js
 │   ├── src/routes/mlRoutes.js
 │   └── src/config/env.js

@@ -18,6 +18,6 @@ export const env = {
   jwtSecret: process.env.JWT_SECRET,
   mongoUri: process.env.MONGODB_URI,
   nodeEnv: process.env.NODE_ENV || 'development',
-  port: Number(process.env.PORT || 5000),
+  port: Number(process.env.PORT || 5001),
   mlApiUrl: process.env.ML_API_URL || 'http://localhost:8000',
 };

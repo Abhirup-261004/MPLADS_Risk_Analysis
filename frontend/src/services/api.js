@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 export async function login(credentials) {
   return sendAuthRequest('/auth/login', credentials);
@@ -23,7 +23,7 @@ async function getProtected(path) {
   const token = localStorage.getItem('prahari_token');
   const response = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || 'Unable to load dashboard data.');
+  if (response.status === 401) clearExpiredSession();
   if (!response.ok) throw new Error(payload.message || payload.detail || 'Unable to load dashboard data.');
   return payload;
 }
@@ -32,9 +32,15 @@ async function sendProtected(path, options = {}) {
   const token = localStorage.getItem('prahari_token');
   const response = await fetch(`${API_URL}${path}`, { ...options, headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || 'Unable to complete request.');
+  if (response.status === 401) clearExpiredSession();
   if (!response.ok) throw new Error(payload.message || payload.detail || 'Unable to complete request.');
   return payload;
+}
+
+function clearExpiredSession() {
+  localStorage.removeItem('prahari_token');
+  localStorage.removeItem('prahari_user');
+  window.dispatchEvent(new Event('prahari:unauthorized'));
 }
 
 export const getDashboardOverview = () => getProtected('/dashboard/overview');
@@ -55,13 +61,11 @@ export const updateProfile = (profile) => sendProtected('/auth/profile', { metho
 export const updateSettings = (settings) => sendProtected('/auth/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
 export const changePassword = (passwords) => sendProtected('/auth/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(passwords) });
 
-export async function runAiAnalysis(question) {
-  const token = localStorage.getItem('prahari_token');
-  const response = await fetch(`${API_URL}/risk/ai-analyst`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || 'Unable to run the AI analysis.');
-  return payload;
-}
+export const runAiAnalysis = (question) => sendProtected('/risk/ai-analyst', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ question }),
+});
 
 export const getReports = () => getProtected('/reports');
 export const getDataRefreshOverview = () => getProtected('/data-refresh/overview');
@@ -78,21 +82,13 @@ export const markNotificationUnread = (id) => sendProtected(`/notifications/${en
 export const markAllNotificationsRead = () => sendProtected('/notifications/read-all', { method: 'PATCH' });
 export const deleteNotification = (id) => sendProtected(`/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
-export async function generateReport(configuration) {
-  const token = localStorage.getItem('prahari_token');
-  const response = await fetch(`${API_URL}/reports/generate`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(configuration) });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || 'Unable to generate report.');
-  return payload;
-}
+export const generateReport = (configuration) => sendProtected('/reports/generate', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(configuration),
+});
 
-export async function markWorkUnderReview(workId) {
-  const token = localStorage.getItem('prahari_token');
-  const response = await fetch(`${API_URL}/works/${encodeURIComponent(workId)}/review`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || 'Unable to update work.');
-  return payload;
-}
+export const markWorkUnderReview = (workId) => sendProtected(`/works/${encodeURIComponent(workId)}/review`, { method: 'PATCH' });
 
 export const categorizeWork = (payload) =>
   sendProtected('/ml/categorize-work', {

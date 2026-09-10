@@ -12,7 +12,7 @@ import SettingsProfile from './components/SettingsProfile.jsx';
 import DataRefresh from './components/DataRefresh.jsx';
 import SideNavbar from './components/SideNavbar.jsx';
 import Logo from './components/Logo.jsx';
-import { getDashboardOverview, getWorks, login, register } from './services/api.js';
+import { getCurrentUser, getDashboardOverview, getWorks, login, register } from './services/api.js';
 
 function MailIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1" /><path d="m4.5 7 7.5 5.5L19.5 7" /></svg>; }
 function LockIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="10.5" width="13" height="10" rx="1" /><path d="M8.5 10.5v-3a3.5 3.5 0 0 1 7 0v3M12 14.5v2" /></svg>; }
@@ -22,10 +22,11 @@ function ShieldIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path
 function getStoredUser() {
   try {
     const storedUser = JSON.parse(localStorage.getItem('prahari_user') || 'null');
-    if (storedUser && typeof storedUser.name === 'string' && typeof storedUser.role === 'string') {
+    const token = localStorage.getItem('prahari_token');
+    if (storedUser && token && typeof storedUser.name === 'string' && typeof storedUser.role === 'string') {
       return storedUser;
     }
-    if (storedUser) {
+    if (storedUser || token) {
       localStorage.removeItem('prahari_user');
       localStorage.removeItem('prahari_token');
     }
@@ -62,13 +63,47 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState(getStoredUser);
+  const [user, setUser] = useState(null);
+  const [sessionReady, setSessionReady] = useState(false);
   const initialRoute = routeFromHash();
   const [page, setPage] = useState(initialRoute.page);
   const [overview, setOverview] = useState(null);
   const [works, setWorks] = useState(null);
   const [selectedWorkId, setSelectedWorkId] = useState(null);
   const [selectedAgencyKey, setSelectedAgencyKey] = useState(initialRoute.agencyKey);
+
+  useEffect(() => {
+    const storedUser = getStoredUser();
+    if (!storedUser) {
+      setSessionReady(true);
+      return undefined;
+    }
+
+    let active = true;
+    getCurrentUser()
+      .then(({ user: verifiedUser }) => {
+        if (!active) return;
+        localStorage.setItem('prahari_user', JSON.stringify(verifiedUser));
+        setUser(verifiedUser);
+      })
+      .catch(() => {
+        localStorage.removeItem('prahari_token');
+        localStorage.removeItem('prahari_user');
+      })
+      .finally(() => { if (active) setSessionReady(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    function handleUnauthorized() {
+      setUser(null);
+      setSessionReady(true);
+      setOverview(null);
+      setWorks(null);
+    }
+    window.addEventListener('prahari:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('prahari:unauthorized', handleUnauthorized);
+  }, []);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -127,6 +162,10 @@ export default function App() {
 
   function signOut() { localStorage.removeItem('prahari_token'); localStorage.removeItem('prahari_user'); setUser(null); setPage('home'); setSelectedAgencyKey(null); setPassword(''); window.location.hash = ''; }
   function updateStoredUser(nextUser) { localStorage.setItem('prahari_user', JSON.stringify(nextUser)); setUser(nextUser); }
+
+  if (!sessionReady) {
+    return <main className="portal-page"><p className="session-loading">Verifying secure session...</p></main>;
+  }
 
   if (user) {
     let content;
