@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
-from mplads_api.core.feature_store import FeatureStore
+from mplads_api.core.feature_store import FeatureStore, sanitize_record
 from mplads_api.schemas.dashboard import HealthResponse
 
 router = APIRouter(tags=["Dashboard & Operations"])
@@ -37,5 +37,5 @@ def get_dashboard_summary(level: str = Query("mp", enum=["mp", "state"]), id: Op
         if store.mp_scorecard is not None and not store.mp_scorecard.empty:
             sort_col = "ml_augmented_composite_risk_score" if "ml_augmented_composite_risk_score" in store.mp_scorecard.columns else "composite_risk_score"
             sorted_mps = store.mp_scorecard.sort_values(by=sort_col, ascending=False).head(20)
-            return sorted_mps.to_dict(orient="records")
+            return [sanitize_record(row) for row in sorted_mps.to_dict(orient="records")]
         return list(store.mp_index.values())[:20]

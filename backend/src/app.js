@@ -9,6 +9,7 @@ import { riskRouter } from './routes/riskRoutes.js';
 import { reportRouter } from './routes/reportRoutes.js';
 import { notificationRouter } from './routes/notificationRoutes.js';
 import { dataRefreshRouter } from './routes/dataRefreshRoutes.js';
+import { mlRouter } from './routes/mlRoutes.js';
 
 export const app = express();
 app.use(cors({ origin: env.clientUrl }));
@@ -21,5 +22,6 @@ app.use('/api/risk', riskRouter);
 app.use('/api/reports', reportRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/data-refresh', dataRefreshRouter);
+app.use('/api/ml', mlRouter);
 app.use(notFound);
 app.use(errorHandler);

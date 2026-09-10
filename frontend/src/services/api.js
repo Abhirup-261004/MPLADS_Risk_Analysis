@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export async function login(credentials) {
   return sendAuthRequest('/auth/login', credentials);
@@ -24,6 +24,7 @@ async function getProtected(path) {
   const response = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || 'Unable to load dashboard data.');
+  if (!response.ok) throw new Error(payload.message || payload.detail || 'Unable to load dashboard data.');
   return payload;
 }
 
@@ -32,6 +33,7 @@ async function sendProtected(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, { ...options, headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || 'Unable to complete request.');
+  if (!response.ok) throw new Error(payload.message || payload.detail || 'Unable to complete request.');
   return payload;
 }
 
@@ -91,3 +93,44 @@ export async function markWorkUnderReview(workId) {
   if (!response.ok) throw new Error(payload.message || 'Unable to update work.');
   return payload;
 }
+
+export const categorizeWork = (payload) =>
+  sendProtected('/ml/categorize-work', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+export const getDisbursementRisk = (payload) =>
+  sendProtected('/ml/disbursement-risk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+export const getCostAnomaly = (payload) =>
+  sendProtected('/ml/cost-anomaly', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+export const getVendorRisk = (vendorId) =>
+  getProtected(`/ml/vendor-risk/${encodeURIComponent(vendorId)}`);
+
+export const getMpRisk = (mpIdentifier, params = {}) => {
+  const query = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''))
+  ).toString();
+  return getProtected(`/ml/mp-risk/${encodeURIComponent(mpIdentifier)}${query ? `?${query}` : ''}`);
+};
+
+export const getStateRisk = (state) =>
+  getProtected(`/ml/state-risk/${encodeURIComponent(state)}`);
+
+export const getMlDashboardSummary = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''))
+  ).toString();
+  return getProtected(`/ml/dashboard-summary${query ? `?${query}` : ''}`);
+};
