@@ -180,7 +180,7 @@ export default function App() {
     else if (page === 'agency') content = <AgencyRisk agencyKey={selectedAgencyKey} onOpenAgency={openAgency} onBack={closeAgency} />;
     else if (page === 'map') content = <MapIntelligence onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} />;
     else content = page === 'works' ? <WorksExplorer user={user} works={works} onSignOut={signOut} onNavigate={navigate} onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} /> : <Dashboard user={user} overview={overview} onSignOut={signOut} onNavigate={navigate} />;
-    return <div className="authenticated-shell"><SideNavbar page={page === 'investigation' ? 'works' : page} onNavigate={navigate} onSignOut={signOut} />{content}</div>;
+    return <div className="authenticated-shell"><SideNavbar user={user} page={page === 'investigation' ? 'works' : page} onNavigate={navigate} onSignOut={signOut} />{content}</div>;
   }
 
   return <main className="portal-page">

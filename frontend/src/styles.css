@@ -152,3 +152,40 @@ form { display: grid; gap: 1.25rem; } label { color: #171b24; display: grid; fon
   .comparison { height: auto; min-height: 28px; }
   .comparison i { flex: 1; }
 }
+
+.mobile-nav-toggle { display: none; }
+.mobile-user-actions { display: none; }
+.sidebar-bottom { align-items: center; grid-template-columns: minmax(0, 1fr) auto; }
+.app-sidebar .sidebar-profile { align-items: center; color: #e5edf8; display: flex; gap: 10px; min-width: 0; padding: 10px 16px 10px 20px; text-align: left; text-transform: none; }
+.sidebar-profile b, .profile-avatar-button { align-items: center; background: #c5ab73; border: 2px solid rgba(255, 255, 255, .72); border-radius: 50%; color: #102a49; display: inline-flex; flex: 0 0 auto; font-size: .66rem; font-weight: 800; height: 30px; justify-content: center; width: 30px; }
+.sidebar-profile span { min-width: 0; }.sidebar-profile strong, .sidebar-profile small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.sidebar-profile strong { font-size: .66rem; }.sidebar-profile small { color: #aebfd3; font-size: .53rem; margin-top: 3px; }
+.app-sidebar .sidebar-bottom .sidebar-profile.active { border-left: 4px solid #c5ab73; padding-left: 16px; }
+.app-sidebar .sidebar-signout { border: 1px solid rgba(237, 184, 188, .42); border-radius: 4px; color: #f1c4c7; font-size: .57rem; margin-right: 14px; padding: 7px 8px; text-transform: uppercase; }
+
+@media (min-width: 721px) and (max-width: 900px) {
+  .app-sidebar .sidebar-bottom { display: grid; grid-template-columns: 1fr; justify-items: center; padding: 10px 0; }
+  .app-sidebar .sidebar-profile { display: flex; justify-content: center; padding: 8px; }
+  .app-sidebar .sidebar-profile span { display: none; }
+  .app-sidebar .sidebar-signout { display: block; font-size: .48rem; margin: 4px 0 0; padding: 6px; }
+}
+
+@media (max-width: 720px) {
+  .app-sidebar { align-items: center; background: #102a49; border: 0; bottom: auto; display: flex; flex-direction: row; height: 56px; justify-content: space-between; min-height: 56px; padding: 0 14px; position: fixed; top: 0; }
+  .sidebar-logo { align-items: center; display: flex; font-size: 1rem; gap: 8px; margin: 0; }
+  .sidebar-logo span { font-size: 1.2rem; }
+  .mobile-user-actions { align-items: center; display: flex; gap: 7px; }
+  .profile-avatar-button { background: #c5ab73; border: 0; height: 31px; width: 31px; }
+  .mobile-signout { background: transparent; border: 1px solid rgba(237, 184, 188, .6); border-radius: 4px; color: #f3c9cc; font-size: .57rem; font-weight: 800; height: 32px; padding: 0 8px; text-transform: uppercase; }
+  .mobile-nav-toggle { align-items: center; background: transparent; border: 1px solid rgba(229, 239, 255, .45); border-radius: 4px; display: flex; flex-direction: column; gap: 4px; height: 34px; justify-content: center; padding: 0; width: 38px; }
+  .mobile-nav-toggle i { background: #eef4ff; display: block; height: 2px; transition: transform .18s ease, opacity .18s ease; width: 17px; }
+  .mobile-menu-open .mobile-nav-toggle i:first-child { transform: translateY(6px) rotate(45deg); }
+  .mobile-menu-open .mobile-nav-toggle i:nth-child(2) { opacity: 0; }
+  .mobile-menu-open .mobile-nav-toggle i:last-child { transform: translateY(-6px) rotate(-45deg); }
+  .app-sidebar nav { background: #102a49; bottom: 104px; box-shadow: 12px 0 26px rgba(6, 21, 43, .2); display: flex; flex-direction: column; height: auto; justify-content: flex-start; left: 0; overflow-y: auto; padding: 10px 0; position: fixed; right: 0; top: 56px; transform: translateX(100%); transition: transform .2s ease; }
+  .app-sidebar.mobile-menu-open nav { transform: translateX(0); }
+  .app-sidebar nav button { align-items: center; flex: 0 0 auto; flex-direction: row; font-size: .72rem; gap: 13px; justify-content: flex-start; min-height: 48px; padding: 12px 22px; text-align: left; }
+  .app-sidebar nav button i { font-size: 1.1rem; width: 22px; }
+  .app-sidebar nav .active { border-left: 4px solid #c5ab73; border-top: 0; padding-left: 18px; padding-top: 12px; }
+  .app-sidebar .sidebar-bottom { display: none; }
+  .authenticated-shell > main, .authenticated-shell .dashboard, .authenticated-shell .works-page, .authenticated-shell .investigation-page { padding-bottom: 20px; padding-top: 56px; }
+}
