@@ -189,3 +189,158 @@ form { display: grid; gap: 1.25rem; } label { color: #171b24; display: grid; fon
   .app-sidebar .sidebar-bottom { display: none; }
   .authenticated-shell > main, .authenticated-shell .dashboard, .authenticated-shell .works-page, .authenticated-shell .investigation-page { padding-bottom: 20px; padding-top: 56px; }
 }
+
+/* ==========================================================================
+   Fraud Response & Risk Action Workflow Styles
+   ========================================================================== */
+
+/* Review Queue Page */
+.review-queue-page { background: #f6f7f9; color: #1e2938; min-height: 100vh; width: 100%; }
+.review-queue-content { margin: 0 auto; max-width: 1240px; padding: 24px 20px 60px; }
+
+.queue-header-strip { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+.queue-header-strip h1 { font-size: clamp(1.5rem, 2.5vw, 2.1rem); letter-spacing: -0.05em; margin: 6px 0 8px; color: #152b4b; }
+.queue-header-strip p { font-size: 0.76rem; color: #526173; max-width: 620px; line-height: 1.55; margin: 0; }
+
+.queue-governance-note { display: flex; align-items: center; gap: 12px; background: #eef3f9; border: 1px solid #cfdceb; border-left: 4px solid #152b4b; padding: 12px 16px; border-radius: 6px; max-width: 440px; }
+.queue-governance-note .gov-icon { font-size: 1.6rem; color: #152b4b; }
+.queue-governance-note strong { display: block; font-size: 0.72rem; color: #152b4b; }
+.queue-governance-note small { display: block; font-size: 0.61rem; color: #43556d; line-height: 1.4; margin-top: 3px; }
+
+/* Stats Grid */
+.queue-stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }
+.queue-stat-card { background: #fff; border: 1px solid #dce2e9; border-radius: 6px; padding: 14px 12px; cursor: pointer; transition: all 0.15s ease; position: relative; }
+.queue-stat-card:hover { border-color: #94a3b8; transform: translateY(-1px); }
+.queue-stat-card.active { border-color: #152b4b; box-shadow: 0 0 0 2px rgba(21, 43, 75, 0.15); background: #fdfefe; }
+.queue-stat-card.hold.active { border-color: #b91c1c; box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.15); }
+.queue-stat-card .stat-label { display: block; font-size: 0.58rem; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; }
+.queue-stat-card .stat-value { display: block; font-size: 1.55rem; font-weight: 600; letter-spacing: -0.04em; color: #0f172a; margin: 4px 0 2px; }
+.queue-stat-card small { display: block; font-size: 0.55rem; color: #94a3b8; }
+
+/* Filter Panel */
+.queue-filter-panel { background: #fff; border: 1px solid #dce2e9; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px; }
+.queue-search-form { display: flex; align-items: center; gap: 8px; width: 100%; }
+.queue-search-form .search-icon { color: #64748b; font-size: 1.1rem; }
+.queue-search-form input { flex: 1; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 12px; font-size: 0.74rem; outline: none; }
+.queue-search-form input:focus { border-color: #152b4b; box-shadow: 0 0 0 2px rgba(21, 43, 75, 0.1); }
+.queue-search-btn { background: #152b4b; color: #fff; border: 0; border-radius: 4px; padding: 8px 16px; font-size: 0.7rem; font-weight: 600; }
+.queue-clear-btn { background: #e2e8f0; color: #334155; border: 0; border-radius: 4px; padding: 8px 12px; font-size: 0.7rem; }
+
+.queue-dropdowns { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.queue-dropdowns label { display: flex; align-items: center; gap: 6px; font-size: 0.68rem; font-weight: 700; color: #334155; }
+.queue-dropdowns select { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 10px; font-size: 0.68rem; outline: none; background: #fff; color: #1e293b; }
+.queue-refresh-btn { margin-left: auto; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 12px; font-size: 0.68rem; font-weight: 600; color: #1e293b; }
+
+/* Table and Badges */
+.queue-table-card { background: #fff; border: 1px solid #dce2e9; border-radius: 6px; overflow: hidden; }
+.queue-work-id { font-family: 'DM Mono', monospace; font-size: 0.66rem; font-weight: 600; color: #1e293b; background: #f1f5f9; padding: 3px 6px; border-radius: 3px; display: inline-block; }
+.queue-appeal-tag { display: inline-block; margin-top: 3px; background: #fef3c7; color: #92400e; font-size: 0.52rem; font-weight: 700; padding: 2px 5px; border-radius: 2px; text-transform: uppercase; }
+.queue-anomaly-text { font-size: 0.65rem; color: #475569; display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.queue-status-pill { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.57rem; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; }
+.queue-status-hold { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.queue-status-escalated { background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
+.queue-status-review { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+.queue-status-cleared { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+.queue-status-flagged { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+
+.queue-sla-pill { display: inline-block; padding: 3px 7px; border-radius: 4px; font-size: 0.58rem; font-weight: 700; }
+.queue-sla-pill.overdue { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.queue-sla-pill.warning { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+.queue-sla-pill.ontrack { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+
+.queue-investigate-btn { background: #152b4b; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; font-size: 0.64rem; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+.queue-investigate-btn:hover { background: #223f6c; }
+
+.queue-loading-state, .queue-empty-state { padding: 48px 24px; text-align: center; }
+.queue-spinner { width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: #152b4b; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.queue-error-banner { background: #fef2f2; color: #991b1b; padding: 12px 16px; font-size: 0.74rem; font-weight: 600; border-bottom: 1px solid #fecaca; }
+
+/* Risk Response Panel in WorkInvestigation */
+.risk-response-panel { background: #fff; border: 1px solid #dce2e9; border-radius: 8px; padding: 20px; margin: 20px 0 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+.risk-response-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.resp-title { display: flex; align-items: center; gap: 12px; }
+.shield-badge { background: #152b4b; color: #fff; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+.resp-title h2 { font-size: 1.05rem; letter-spacing: -0.03em; margin: 0 0 4px; color: #152b4b; }
+.resp-title p { font-size: 0.68rem; color: #526173; margin: 0; }
+.resp-sla-box { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.sla-title { font-size: 0.55rem; font-weight: 800; text-transform: uppercase; color: #64748b; }
+
+.workflow-alert-banner { display: flex; gap: 14px; padding: 14px 18px; border-radius: 6px; margin-bottom: 18px; }
+.workflow-alert-banner.hold { background: #fef2f2; border: 1px solid #fca5a5; border-left: 5px solid #b91c1c; color: #991b1b; }
+.workflow-alert-banner.escalated { background: #faf5ff; border: 1px solid #d8b4fe; border-left: 5px solid #7e22ce; color: #6b21a8; }
+.workflow-alert-banner.cleared { background: #f0fdf4; border: 1px solid #86efac; border-left: 5px solid #16a34a; color: #166534; }
+.workflow-alert-banner.appeal { background: #fffbeb; border: 1px solid #fde68a; border-left: 5px solid #d97706; color: #92400e; }
+.workflow-alert-banner .banner-icon { font-size: 1.4rem; flex-shrink: 0; }
+.workflow-alert-banner .banner-body strong { display: block; font-size: 0.78rem; letter-spacing: 0.02em; }
+.workflow-alert-banner .banner-body p { font-size: 0.7rem; margin: 4px 0 8px; line-height: 1.45; }
+.workflow-alert-banner .banner-meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.64rem; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 6px; }
+
+.risk-response-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid #f1f5f9; }
+.actions-label { font-size: 0.66rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 4px; }
+
+.action-btn { font-size: 0.68rem; font-weight: 700; border-radius: 4px; padding: 8px 14px; border: 0; cursor: pointer; transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 6px; }
+.action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.hold-btn { background: #b91c1c; color: #fff; }
+.hold-btn:hover:not(:disabled) { background: #991b1b; }
+.release-btn { background: #0284c7; color: #fff; }
+.release-btn:hover:not(:disabled) { background: #0369a1; }
+.clear-btn { background: #15803d; color: #fff; }
+.clear-btn:hover:not(:disabled) { background: #166534; }
+.escalate-btn { background: #6b21a8; color: #fff; }
+.escalate-btn:hover:not(:disabled) { background: #581c87; }
+.appeal-btn { background: #f8fafc; border: 1px solid #cbd5e1; color: #334155; }
+.appeal-btn:hover { background: #e2e8f0; }
+.audit-btn { background: #f1f5f9; border: 1px solid #cbd5e1; color: #1e293b; margin-left: auto; }
+
+/* Modals */
+.workflow-modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(2px); z-index: 999; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.workflow-modal-card { background: #fff; border-radius: 8px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); width: min(100%, 520px); max-height: 90vh; overflow-y: auto; padding: 24px; position: relative; }
+.workflow-modal-card h3 { font-size: 1.15rem; color: #0f172a; letter-spacing: -0.03em; margin: 0 0 8px; }
+.modal-desc { font-size: 0.72rem; color: #64748b; line-height: 1.5; margin: 0 0 16px; }
+.workflow-modal-card label { display: grid; font-size: 0.68rem; font-weight: 700; color: #1e293b; gap: 6px; margin-bottom: 14px; }
+.workflow-modal-card textarea, .workflow-modal-card input, .workflow-modal-card select { width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 10px; font-size: 0.73rem; outline: none; font-family: inherit; }
+.workflow-modal-card textarea:focus, .workflow-modal-card input:focus, .workflow-modal-card select:focus { border-color: #152b4b; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.modal-actions button { font-size: 0.72rem; font-weight: 600; padding: 8px 16px; border-radius: 4px; border: 0; cursor: pointer; }
+.btn-cancel { background: #e2e8f0; color: #334155; }
+.btn-confirm-danger { background: #b91c1c; color: #fff; }
+.btn-confirm-primary { background: #152b4b; color: #fff; }
+.btn-confirm-success { background: #15803d; color: #fff; }
+.btn-confirm-purple { background: #6b21a8; color: #fff; }
+.modal-error { background: #fee2e2; color: #991b1b; padding: 8px 12px; border-radius: 4px; font-size: 0.68rem; margin-bottom: 12px; }
+.modal-success { background: #dcfce7; color: #166534; padding: 8px 12px; border-radius: 4px; font-size: 0.68rem; margin-bottom: 12px; }
+
+/* Audit Timeline Drawer */
+.audit-drawer { display: flex; flex-direction: column; }
+.audit-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.audit-head h3 { margin: 0; }
+.close-x { background: none; border: 0; font-size: 1.4rem; color: #64748b; cursor: pointer; padding: 0 4px; line-height: 1; }
+.audit-timeline { display: flex; flex-direction: column; gap: 12px; margin: 16px 0; max-height: 380px; overflow-y: auto; padding-right: 6px; }
+.audit-timeline-item { display: flex; gap: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }
+.audit-badge-col { flex-shrink: 0; }
+.audit-event-badge { display: inline-block; font-size: 0.52rem; font-weight: 800; padding: 3px 6px; border-radius: 3px; font-family: 'DM Mono', monospace; }
+.audit-event-badge.HOLD_APPLIED { background: #fee2e2; color: #991b1b; }
+.audit-event-badge.HOLD_RELEASED { background: #e0f2fe; color: #0369a1; }
+.audit-event-badge.WORK_CLEARED { background: #dcfce7; color: #166534; }
+.audit-event-badge.WORK_ESCALATED { background: #f3e8ff; color: #6b21a8; }
+.audit-event-badge.APPEAL_SUBMITTED { background: #fef3c7; color: #92400e; }
+.audit-event-badge.RISK_FLAGGED { background: #f1f5f9; color: #475569; }
+.audit-details-col { flex: 1; min-width: 0; }
+.audit-actor-line { display: flex; align-items: baseline; gap: 6px; font-size: 0.66rem; color: #1e293b; }
+.audit-actor-line small { color: #64748b; }
+.audit-actor-line time { margin-left: auto; color: #94a3b8; font-size: 0.58rem; }
+.audit-transition { font-size: 0.62rem; color: #475569; margin: 4px 0; }
+.audit-reason-text { font-size: 0.68rem; color: #0f172a; font-style: italic; background: #fff; padding: 6px 10px; border-radius: 4px; border: 1px solid #e2e8f0; margin-top: 6px; }
+
+@media (max-width: 900px) {
+  .queue-stats-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 600px) {
+  .queue-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .risk-response-actions { flex-direction: column; align-items: stretch; }
+  .action-btn { width: 100%; justify-content: center; }
+  .audit-btn { margin-left: 0; }
+}
+

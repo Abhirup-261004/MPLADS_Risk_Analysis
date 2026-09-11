@@ -130,3 +130,63 @@ export const getMlDashboardSummary = (params = {}) => {
   ).toString();
   return getProtected(`/ml/dashboard-summary${query ? `?${query}` : ''}`);
 };
+
+// Fraud Response & Risk Action Workflow APIs
+export const getReviewQueue = (params = {}) => {
+  const query = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''))
+  ).toString();
+  return getProtected(`/risk/review-queue${query ? `?${query}` : ''}`);
+};
+
+export const getReviewById = (id) => getProtected(`/risk/reviews/${encodeURIComponent(id)}`);
+
+export const clearWorkReview = (id, data) =>
+  sendProtected(`/risk/reviews/${encodeURIComponent(id)}/clear`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+export const escalateWorkReview = (id, data) =>
+  sendProtected(`/risk/reviews/${encodeURIComponent(id)}/escalate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+export const holdWork = (workId, data) =>
+  sendProtected(`/risk/works/${encodeURIComponent(workId)}/hold`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+export const releaseWorkHold = (workId, data) =>
+  sendProtected(`/risk/works/${encodeURIComponent(workId)}/release`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+export const getWorkAuditTrail = (workId, params = {}) => {
+  const query = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''))
+  ).toString();
+  return getProtected(`/risk/works/${encodeURIComponent(workId)}/audit${query ? `?${query}` : ''}`);
+};
+
+export const submitWorkAppeal = (workId, data) =>
+  sendProtected(`/risk/works/${encodeURIComponent(workId)}/appeal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+export const requestAgencySuspension = (agencyKey, data) =>
+  sendProtected(`/risk/agencies/${encodeURIComponent(agencyKey)}/suspension-request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+

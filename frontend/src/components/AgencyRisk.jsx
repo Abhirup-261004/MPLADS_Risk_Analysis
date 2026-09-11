@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Radar, RadarChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { getAgencyRisk, getAgencyRiskProfile } from '../services/api.js';
+import { getAgencyRisk, getAgencyRiskProfile, requestAgencySuspension } from '../services/api.js';
 import { downloadCsv } from '../utils/download.js';
 
 const riskColors = { high: '#913941', medium: '#705b36', low: '#4d6278' };
@@ -74,5 +74,56 @@ function AgencyRiskProfile({ agencyKey, onBack }) {
       <article className="agency-detail-card risk-drivers"><h2>{heading}</h2>{riskDrivers.map((driver) => <p key={driver.label}><span>{driver.label}</span><strong className={driver.level.toLowerCase()}>{driver.level}</strong><small>{driver.value} {driver.unit}</small></p>)}</article>
       <article className="agency-detail-card agency-peer-card"><h2>Peer Comparison</h2>{peerData.length > 1 ? <ResponsiveContainer width="100%" height={310}><BarChart data={peerData} layout="vertical" margin={{ left: 20, right: 20 }}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" domain={[0, 100]} /><YAxis type="category" dataKey="name" width={115} /><Tooltip /><Bar dataKey="delayRate" name="Delay Rate" fill="#8a7448" /><Bar dataKey="overrunRate" name="Overrun Rate" fill="#913941" /><Bar dataKey="incompleteMarkingRate" name="Incomplete-Marking Rate" fill="#60738b" /></BarChart></ResponsiveContainer> : <EmptyMetric text="No same-state peer agencies available" />}</article>
       <article className="agency-detail-card agency-work-list"><h2>Highest-Risk Works</h2><table><thead><tr><th>Work</th><th>District</th><th>Status</th><th>Risk</th></tr></thead><tbody>{works.slice(0, 6).map((work) => <tr key={work.workId}><td><strong>{work.workId}</strong><small>{work.title}</small></td><td>{work.district}</td><td>{work.status}</td><td><span className={`agency-score ${work.riskLevel}`}>{work.riskScore}</span></td></tr>)}</tbody></table></article>
+      <article className="agency-detail-card confirmed-pattern-card">
+        <h2>Confirmed / Reviewed Risk Pattern</h2>
+        <p style={{ fontSize: '0.72rem', color: '#526173', margin: '6px 0 14px' }}>
+          Responsible Governance Protocol: An agency is never automatically suspended because of a single AI flag. Administrative action requires multiple independently confirmed works and explicit Ministry authorization.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', margin: '12px 0' }}>
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '4px' }}>
+            <span style={{ fontSize: '0.58rem', textTransform: 'uppercase', color: '#64748b' }}>Total Portfolio</span>
+            <strong style={{ display: 'block', fontSize: '1.2rem', color: '#0f172a' }}>{performanceSummary.totalWorks}</strong>
+          </div>
+          <div style={{ background: '#fff5f5', border: '1px solid #fed7d7', padding: '10px', borderRadius: '4px' }}>
+            <span style={{ fontSize: '0.58rem', textTransform: 'uppercase', color: '#991b1b' }}>High-Risk Works</span>
+            <strong style={{ display: 'block', fontSize: '1.2rem', color: '#991b1b' }}>{works.filter((w) => w.riskLevel === 'high').length}</strong>
+          </div>
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '10px', borderRadius: '4px' }}>
+            <span style={{ fontSize: '0.58rem', textTransform: 'uppercase', color: '#166534' }}>Completion Rate</span>
+            <strong style={{ display: 'block', fontSize: '1.2rem', color: '#166534' }}>{formatPercent(breakdown.completion.completionRate)}</strong>
+          </div>
+        </div>
+
+        {works.filter((w) => w.riskLevel === 'high').length >= 2 ? (
+          <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: '12px', borderRadius: '6px', marginTop: '10px' }}>
+            <strong style={{ color: '#9a3412', fontSize: '0.75rem', display: 'block' }}>&#x26A0; Ministry Review Recommended</strong>
+            <p style={{ fontSize: '0.67rem', color: '#7c2d12', margin: '4px 0 10px' }}>
+              Multiple recurring high-risk works ({works.filter((w) => w.riskLevel === 'high').length} works) identified across this agency&apos;s portfolio. Authorized Ministry officials may initiate formal suspension proceedings.
+            </p>
+            <button
+              type="button"
+              style={{ background: '#152b4b', color: '#fff', border: 0, padding: '7px 13px', fontSize: '0.66rem', borderRadius: '4px', cursor: 'pointer' }}
+              onClick={async () => {
+                const justification = window.prompt(`Enter Ministry justification for agency suspension review (${profile.agency}):`);
+                if (!justification || !justification.trim()) return;
+                try {
+                  const res = await requestAgencySuspension(profile.agency, { justification: justification.trim() });
+                  alert(res.message || 'Suspension review initiated.');
+                } catch (err) {
+                  alert(err.message || 'Failed to submit suspension request.');
+                }
+              }}
+            >
+              Initiate Ministry Suspension Review
+            </button>
+          </div>
+        ) : (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '6px', marginTop: '10px' }}>
+            <p style={{ fontSize: '0.67rem', color: '#475569', margin: 0 }}>
+              &#x2713; <strong>Threshold Condition Satisfied:</strong> No recurring multi-work escalation pattern detected. Agency remains eligible for ongoing MPLADS works.
+            </p>
+          </div>
+        )}
+      </article>
     </section></section></main>;
 }

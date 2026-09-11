@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 const items = [
   ['home', 'National Overview', '\u25a6'],
+  ['review-queue', 'Review Queue', '\u2691'],
   ['risk', 'Risk Center', '\u25b3'],
   ['works', 'Works Explorer', '\u2315'],
   ['agency', 'Agency Risk', '\u2302'],

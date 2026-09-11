@@ -11,6 +11,7 @@ import Notifications from './components/Notifications.jsx';
 import SettingsProfile from './components/SettingsProfile.jsx';
 import DataRefresh from './components/DataRefresh.jsx';
 import SideNavbar from './components/SideNavbar.jsx';
+import ReviewQueue from './components/ReviewQueue.jsx';
 import Logo from './components/Logo.jsx';
 import { getCurrentUser, getDashboardOverview, getWorks, login, register } from './services/api.js';
 
@@ -44,7 +45,7 @@ function routeFromHash() {
   const [path, ...rest] = hash.split('/');
   if (path === 'agency-risk' && rest.length) return { page: 'agency', agencyKey: rest.join('/') };
   if (path === 'agency-risk') return { page: 'agency', agencyKey: null };
-  const validPages = new Set(['home', 'risk', 'works', 'agency', 'ai', 'notifications', 'reports', 'map', 'analytics', 'data-refresh', 'settings']);
+  const validPages = new Set(['home', 'review-queue', 'risk', 'works', 'agency', 'ai', 'notifications', 'reports', 'map', 'analytics', 'data-refresh', 'settings']);
   return { page: validPages.has(path) ? path : 'home', agencyKey: null };
 }
 
@@ -170,6 +171,7 @@ export default function App() {
   if (user) {
     let content;
     if (page === 'investigation' && selectedWorkId) content = <WorkInvestigation workId={selectedWorkId} user={user} onSignOut={signOut} onNavigate={navigate} />;
+    else if (page === 'review-queue') content = <ReviewQueue user={user} onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} onNavigate={navigate} />;
     else if (page === 'risk') content = <RiskCenter />;
     else if (page === 'ai') content = <AiAnalyst onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} />;
     else if (page === 'reports') content = <ReportsExport />;

@@ -18,6 +18,41 @@ const workSchema = new mongoose.Schema(
     alert: { type: String, default: '' },
     underReview: { type: Boolean, default: false },
     coordinates: { latitude: { type: Number, required: true }, longitude: { type: Number, required: true } },
+
+    // Fraud Response & Risk Action Workflow
+    riskStatus: {
+      type: String,
+      enum: ['ACTIVE', 'FLAGGED', 'ON_HOLD', 'UNDER_REVIEW', 'CLEARED', 'ESCALATED', 'AGENCY_SUSPENDED'],
+      default: 'ACTIVE',
+      index: true,
+    },
+    holdReason: { type: String, default: '' },
+    holdAt: { type: Date },
+    holdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    holdActorName: { type: String, default: '' },
+    reviewAssignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reviewAssignedAt: { type: Date },
+    reviewDueAt: { type: Date, index: true },
+    reviewDecision: { type: String, enum: ['PENDING', 'CLEARED', 'ESCALATED', 'NONE'], default: 'NONE' },
+    reviewedAt: { type: Date },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reviewerName: { type: String, default: '' },
+    reviewNotes: { type: String, default: '' },
+    reviewEvidence: { type: mongoose.Schema.Types.Mixed, default: {} },
+    escalationStatus: { type: String, default: 'NONE' },
+    escalatedAt: { type: Date },
+    escalatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    escalationReason: { type: String, default: '' },
+    appealStatus: {
+      type: String,
+      enum: ['NONE', 'SUBMITTED', 'UNDER_REVIEW', 'ACCEPTED', 'REJECTED'],
+      default: 'NONE',
+      index: true,
+    },
+    appealReason: { type: String, default: '' },
+    appealSubmittedBy: { type: String, default: '' },
+    appealSubmittedAt: { type: Date },
+    appealEvidence: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );
@@ -26,5 +61,7 @@ workSchema.index({ title: 'text', workId: 'text', district: 'text', agency: 'tex
 workSchema.index({ riskScore: -1, updatedAt: -1 });
 workSchema.index({ riskLevel: 1, riskScore: -1 });
 workSchema.index({ agency: 1, state: 1, riskScore: -1 });
+workSchema.index({ riskStatus: 1, riskScore: -1 });
+workSchema.index({ reviewDueAt: 1, riskStatus: 1 });
 
 export const Work = mongoose.model('Work', workSchema);
