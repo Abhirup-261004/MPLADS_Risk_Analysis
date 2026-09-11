@@ -107,6 +107,14 @@ class FeatureStore:
 
         logger.info("Indexed %d combined work records.", len(self.work_index))
 
+        # Build MP Expenditure Aggregation Map from Work Index
+        mp_expenditure_map: Dict[str, float] = {}
+        for w_record in self.work_index.values():
+            mp_k = w_record.get("mp_key")
+            disbursed = float(w_record.get("effective_disbursed") or w_record.get("total_fund_disbursed") or 0.0)
+            if mp_k and mp_k != "None":
+                mp_expenditure_map[mp_k] = mp_expenditure_map.get(mp_k, 0.0) + disbursed
+
         # 3. Load Feature 7 MP Master Scorecard
         mp_path = settings.FEATURE7_ARTIFACT_DIR / "feature7_mp_composite_risk.parquet"
         if not mp_path.exists():
@@ -115,6 +123,12 @@ class FeatureStore:
         if mp_path.exists():
             logger.info("Loading MP composite scorecard from %s", mp_path)
             self.mp_scorecard = pd.read_parquet(mp_path) if str(mp_path).endswith(".parquet") else pd.read_csv(mp_path, low_memory=False)
+            
+            # Map aggregated expenditure amounts into mp_scorecard
+            self.mp_scorecard["total_expenditure_amount"] = self.mp_scorecard["mp_key"].map(mp_expenditure_map).fillna(0.0)
+            self.mp_scorecard["expenditure_amount"] = self.mp_scorecard["total_expenditure_amount"]
+            self.mp_scorecard["expenditure"] = self.mp_scorecard["total_expenditure_amount"]
+
             for row_dict in self.mp_scorecard.to_dict(orient="records"):
                 clean_dict = sanitize_record(row_dict)
                 mp_k = str(clean_dict.get("mp_key", ""))

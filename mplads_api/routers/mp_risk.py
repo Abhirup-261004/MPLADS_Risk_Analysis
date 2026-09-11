@@ -19,6 +19,8 @@ def get_mp_risk(
         comp_score = float(record.get("ml_augmented_composite_risk_score") or record.get("composite_risk_score") or 0.0)
         risk_tier = str(record.get("ml_augmented_risk_tier") or record.get("composite_risk_tier") or "Low")
 
+        exp_val = float(record.get("total_expenditure_amount") or record.get("expenditure_amount") or record.get("expenditure") or 0.0)
+
         return MPRiskResponse(
             mp_key=str(record.get("mp_key", mp_identifier)),
             mp_name_clean=str(record.get("mp_name_clean") or mp_identifier),
@@ -27,6 +29,9 @@ def get_mp_risk(
             constituency=record.get("constituency"),
             allocated_amount=float(record.get("allocated_amount") or 0.0),
             total_sanctioned_amount=float(record.get("total_sanctioned_amount") or 0.0),
+            total_expenditure_amount=exp_val,
+            expenditure_amount=exp_val,
+            expenditure=exp_val,
             composite_risk_score=comp_score,
             risk_tier=risk_tier,
             allocation_utilization_pct=float(record.get("allocation_utilization_pct") or 0.0),

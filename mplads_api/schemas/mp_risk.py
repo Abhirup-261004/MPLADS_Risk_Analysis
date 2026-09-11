@@ -27,6 +27,9 @@ class MPRiskResponse(BaseModel):
     constituency: Optional[str] = None
     allocated_amount: float
     total_sanctioned_amount: float
+    total_expenditure_amount: Optional[float] = 0.0
+    expenditure_amount: Optional[float] = 0.0
+    expenditure: Optional[float] = 0.0
     composite_risk_score: float
     risk_tier: str
     allocation_utilization_pct: float
