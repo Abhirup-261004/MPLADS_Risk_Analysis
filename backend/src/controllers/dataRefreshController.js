@@ -15,7 +15,8 @@ export const getDataRefreshOverview = asyncHandler(async (req, res) => {
   const sources = dataSources.map((source) => {
     const stat = statBySource.get(source.key); const run = runBySource.get(source.key);
     const status = run?.status || (stat?.rowCount ? 'healthy' : 'missing');
-    return { ...source, status, rowCount: stat?.rowCount || 0, lastSync: run?.createdAt || stat?.lastSync || null, failedRows: run?.failedRows || 0, message: run?.message || (stat?.rowCount ? 'Source available and indexed.' : 'Source has not been imported.') };
+    const rowCount = stat?.rowCount || run?.importedRows || 0;
+    return { ...source, status, rowCount, lastSync: run?.createdAt || stat?.lastSync || null, failedRows: run?.failedRows || 0, message: run?.message || (rowCount ? 'Source available and indexed.' : 'Source has not been imported.') };
   });
   const healthySources = sources.filter((source) => source.status === 'healthy').length;
   const failedRows = sources.reduce((sum, source) => sum + source.failedRows, 0);

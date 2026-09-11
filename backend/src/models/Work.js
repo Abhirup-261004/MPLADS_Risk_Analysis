@@ -9,8 +9,11 @@ const workSchema = new mongoose.Schema(
     agency: { type: String, required: true, trim: true },
     sector: { type: String, required: true, trim: true },
     constituency: { type: String, required: true, trim: true },
+    mpName: { type: String, default: '', trim: true },
+    house: { type: String, default: '', trim: true },
     sanctionedAmount: { type: Number, required: true, min: 0 },
     expenditureAmount: { type: Number, required: true, min: 0 },
+    expenditureSource: { type: String, enum: ['DIRECT_PAYMENT', 'MP_SUMMARY_ALLOCATION', 'UNAVAILABLE'], default: 'UNAVAILABLE' },
     progress: { type: Number, required: true, min: 0, max: 100 },
     status: { type: String, enum: ['Sanctioned', 'Ongoing', 'Completed', 'Delayed'], required: true, index: true },
     riskLevel: { type: String, enum: ['low', 'medium', 'high'], required: true, index: true },
@@ -24,7 +27,6 @@ const workSchema = new mongoose.Schema(
       type: String,
       enum: ['ACTIVE', 'FLAGGED', 'ON_HOLD', 'UNDER_REVIEW', 'CLEARED', 'ESCALATED', 'AGENCY_SUSPENDED'],
       default: 'ACTIVE',
-      index: true,
     },
     holdReason: { type: String, default: '' },
     holdAt: { type: Date },
@@ -32,7 +34,7 @@ const workSchema = new mongoose.Schema(
     holdActorName: { type: String, default: '' },
     reviewAssignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     reviewAssignedAt: { type: Date },
-    reviewDueAt: { type: Date, index: true },
+    reviewDueAt: { type: Date },
     reviewDecision: { type: String, enum: ['PENDING', 'CLEARED', 'ESCALATED', 'NONE'], default: 'NONE' },
     reviewedAt: { type: Date },
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -47,7 +49,6 @@ const workSchema = new mongoose.Schema(
       type: String,
       enum: ['NONE', 'SUBMITTED', 'UNDER_REVIEW', 'ACCEPTED', 'REJECTED'],
       default: 'NONE',
-      index: true,
     },
     appealReason: { type: String, default: '' },
     appealSubmittedBy: { type: String, default: '' },
@@ -57,11 +58,6 @@ const workSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-workSchema.index({ title: 'text', workId: 'text', district: 'text', agency: 'text' });
 workSchema.index({ riskScore: -1, updatedAt: -1 });
-workSchema.index({ riskLevel: 1, riskScore: -1 });
-workSchema.index({ agency: 1, state: 1, riskScore: -1 });
-workSchema.index({ riskStatus: 1, riskScore: -1 });
-workSchema.index({ reviewDueAt: 1, riskStatus: 1 });
 
 export const Work = mongoose.model('Work', workSchema);

@@ -8,7 +8,10 @@ export const getWorks = asyncHandler(async (req, res) => {
   if (district) filter.district = district;
   if (status) filter.status = status;
   if (risk) filter.riskLevel = risk;
-  if (search.trim()) filter.$text = { $search: search.trim() };
+  if (search.trim()) {
+    const escapedSearch = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    filter.$or = ['workId', 'title', 'district', 'agency'].map((field) => ({ [field]: { $regex: escapedSearch, $options: 'i' } }));
+  }
 
   const safePage = Math.max(Number(page), 1);
   const safeLimit = Math.min(Math.max(Number(limit), 1), 100);
