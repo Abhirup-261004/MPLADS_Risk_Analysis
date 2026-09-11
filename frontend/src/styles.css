@@ -60,3 +60,95 @@ form { display: grid; gap: 1.25rem; } label { color: #171b24; display: grid; fon
 @media (max-width: 900px) { .agency-summary-grid { grid-template-columns: repeat(2, 1fr); }.agency-detail-grid, .agency-breakdown { grid-template-columns: 1fr; }.agency-peer-card, .agency-work-list, .cost-distribution, .agency-performance-card { grid-column: auto; }.analytics-summary-strip { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 600px) { .agency-profile-header { flex-direction: column; }.agency-summary-grid, .analytics-summary-strip { grid-template-columns: 1fr; }.agency-top { padding: 0 14px; }.agency-top input { width: 100%; } }
 .session-loading { align-items: center; color: #f7f8fb; display: flex; font-size: .86rem; font-weight: 700; justify-content: center; letter-spacing: .04em; margin: 0; min-height: 100vh; }
+
+/* Shared responsive layout layer for the authenticated portal. */
+@media (max-width: 1100px) {
+  .app-sidebar { flex-basis: 210px; }
+  .sidebar-logo { margin-inline: 20px; }
+  .app-sidebar button { padding-inline: 20px; }
+  .dashboard-content, .works-content, .investigation-content, .agency-content, .map-page > *, .reports-content, .ai-analyst-content, .refresh-content, .notifications-content, .settings-content { max-width: 100%; }
+  .analytics-title { align-items: flex-start; flex-direction: column; gap: 16px; }
+  .analytics-actions { align-items: stretch; width: 100%; }
+  .analytics-filters { flex-wrap: wrap; }
+}
+
+@media (max-width: 900px) {
+  .app-sidebar { flex-basis: 72px; padding-top: 18px; }
+  .sidebar-logo { font-size: 0; justify-content: center; margin: 0 0 26px; }
+  .sidebar-logo span { font-size: 1.55rem; }
+  .app-sidebar button { font-size: 0; justify-content: center; padding: 15px 10px; }
+  .app-sidebar button i { font-size: 1.2rem; width: auto; }
+  .app-sidebar nav .active, .app-sidebar .sidebar-bottom .active { padding-left: 7px; }
+  .app-sidebar .sidebar-signout { display: none; }
+  .risk-kpis, .work-stat-grid, .agency-kpis, .refresh-kpis, .map-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .risk-center-grid, .analytics-grid, .ai-workspace, .map-workspace, .settings-grid, .agency-detail-grid { grid-template-columns: 1fr; }
+  .priority-insights, .ai-insights, .map-sidebar, .agency-peer-card, .agency-work-list, .cost-distribution, .agency-performance-card { grid-column: auto; grid-row: auto; }
+  .ai-query-panel, .profile-card { position: static; }
+  .map-canvas { min-height: 480px; }
+  .map-sidebar { max-height: none; }
+  .report-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-fields, .access-panel-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .notification-detail { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  body { overflow-x: hidden; }
+  .authenticated-shell { display: block; }
+  .app-sidebar { background: #031a36; border-top: 1px solid #29405f; bottom: 0; display: block; height: 62px; left: 0; min-height: 0; padding: 0; position: fixed; right: 0; top: auto; width: 100%; z-index: 30; }
+  .sidebar-logo, .app-sidebar .sidebar-bottom { display: none; }
+  .app-sidebar nav { display: flex; height: 100%; justify-content: space-around; }
+  .app-sidebar nav button { flex: 1; font-size: .48rem; gap: 3px; min-width: 0; padding: 7px 3px; text-align: center; }
+  .app-sidebar button i { font-size: 1.1rem; }
+  .app-sidebar nav .active, .app-sidebar .sidebar-bottom .active { border-left: 0; border-top: 3px solid #e7bd6d; padding-left: 3px; padding-top: 4px; }
+  .authenticated-shell > main, .authenticated-shell .dashboard, .authenticated-shell .works-page, .authenticated-shell .investigation-page { padding-bottom: 76px; }
+  .dashboard-header, .risk-top, .agency-top, .map-top, .reports-top, .ai-topbar, .refresh-top { gap: 10px; min-height: 56px; padding-inline: 12px; }
+  .dashboard-brand span, .header-actions button, .risk-top b, .agency-top span, .map-top span, .reports-top span, .ai-topbar b, .refresh-top span { display: none; }
+  .dashboard-brand strong { font-size: .9rem; }
+  .command-search { margin: 8px 10px; }
+  .overview-heading, .works-hero > div, .investigation-head, .agency-title, .risk-title, .analytics-title, .settings-heading, .reports-heading, .refresh-heading, .notifications-heading { align-items: stretch; flex-direction: column; gap: 12px; }
+  .dashboard-content, .works-content, .investigation-content, .risk-body, .agency-content, .reports-content, .ai-analyst-content, .refresh-content, .notifications-content, .settings-content { padding-inline: 12px; }
+  .works-hero { padding: 16px 12px; }
+  .metric-grid, .work-stat-grid, .risk-kpis, .agency-kpis, .agency-summary-grid, .refresh-kpis, .map-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .visual-grid, .investigation-grid, .risk-center-grid, .analytics-grid, .ai-workspace, .map-workspace, .settings-grid, .agency-detail-grid { grid-template-columns: 1fr; }
+  .analytics-card, .queue-card, .trend-card, .priority-insights, .report-configuration, .recent-reports { min-width: 0; }
+  .analytics-actions, .analytics-downloads, .analytics-filters, .report-options, .notification-actions { align-items: stretch; flex-direction: column; width: 100%; }
+  .analytics-filters select, .analytics-downloads button, .report-options button, .notification-actions button { width: 100%; }
+  .report-cards, .report-fields, .access-panel-settings, .settings-fields { grid-template-columns: 1fr; }
+  .report-cards article { min-height: 0; }
+  .map-canvas { min-height: 390px; }
+  .map-filters { flex-wrap: wrap; left: 10px; right: 10px; top: 10px; }
+  .map-filters select, .map-filters button { flex: 1 1 135px; }
+  .map-work-card { bottom: 12px; left: 12px; max-width: calc(100% - 24px); right: 12px; width: auto; }
+  .map-sidebar { padding: 14px; }
+  .ai-query-panel { padding: 14px; }
+  .analysis-response, .state-analysis, .evidence-summary { grid-template-columns: 1fr; }
+  .analysis-actions { flex-direction: column; }
+  .analysis-actions button { width: 100%; }
+  .score-card { min-width: 0; width: 100%; }
+  .investigation-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .assessment-bottom, .agency-breakdown { grid-template-columns: 1fr; }
+  .anomaly { align-items: flex-start; flex-direction: column; }
+  .table-wrap, .agency-table, .queue-card, .agency-work-list, .source-table, .recent-reports { -webkit-overflow-scrolling: touch; overflow-x: auto; }
+  .table-wrap table, .agency-table table, .queue-card table, .agency-work-list table, .source-table table, .recent-reports table { min-width: 620px; }
+  .table-wrap footer { min-width: 620px; }
+}
+
+@media (max-width: 430px) {
+  .portal-page { min-width: 0; }
+  .intelligence-panel { min-height: 390px; padding: 2rem 1.35rem; }
+  .access-panel { padding: 2rem 1rem; }
+  .access-card { padding: 1.35rem; }
+  .access-footer nav { gap: .65rem; }
+  .access-footer a + a { padding-left: .65rem; }
+  .metric-grid, .work-stat-grid, .risk-kpis, .agency-kpis, .agency-summary-grid, .refresh-kpis, .map-metrics, .investigation-metrics { grid-template-columns: 1fr; }
+  .metric-card, .work-stat-grid article, .risk-kpis article, .agency-summary-grid article { min-height: 0; }
+  .risk-title h1, .analytics-title h1, .agency-profile-header h1, .settings-heading h1 { font-size: 1.45rem; }
+  .map-canvas { min-height: 340px; }
+  .map-filters { display: grid; grid-template-columns: 1fr 1fr; }
+  .map-filters > :first-child { grid-column: 1 / -1; }
+  .map-work-card { font-size: .9rem; }
+  .score-card footer, .settings-section footer, .settings-password-drawer footer { flex-direction: column; }
+  .score-card footer button, .settings-section footer button, .settings-password-drawer footer button { width: 100%; }
+  .comparison { height: auto; min-height: 28px; }
+  .comparison i { flex: 1; }
+}
