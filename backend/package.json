@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon --legacy-watch --watch src --ext js,json src/server.js",
     "start": "node src/server.js",
-    "import:data": "node src/scripts/importMpladsData.js"
+    "import:data": "node src/scripts/importMpladsData.js",
+    "backfill:progress": "node src/scripts/backfillWorkProgress.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

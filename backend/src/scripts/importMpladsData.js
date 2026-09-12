@@ -104,6 +104,31 @@ function allocateExpenditure(workEntries, expenditureRows, summaryRows) {
   }, { direct: 0, allocated: 0, unavailable: 0 });
 }
 
+function deriveProgressFromExpenditure(workEntries) {
+  workEntries.forEach(({ work }) => {
+    if (work.status === 'Completed' || !work.sanctionedAmount || !work.expenditureAmount) return;
+    const utilization = Math.min(95, Math.round((work.expenditureAmount / work.sanctionedAmount) * 100));
+    if (utilization > work.progress) {
+      work.progress = utilization;
+      work.progressSource = 'FINANCIAL_UTILIZATION';
+      if (work.status === 'Sanctioned') work.status = 'Ongoing';
+    }
+  });
+}
+
+function mockProgress(workId) {
+  return 8 + [...String(workId)].reduce((hash, character) => ((hash * 31) + character.charCodeAt(0)) >>> 0, 0) % 63;
+}
+
+function populateMockProgress(workEntries) {
+  workEntries.forEach(({ work }) => {
+    if (work.status === 'Completed' || work.progress > 0) return;
+    work.progress = mockProgress(work.workId);
+    work.progressSource = 'MOCK_ESTIMATE';
+    work.status = 'Ongoing';
+  });
+}
+
 async function bulkUpsert(Model, operations) { if (operations.length) await Model.bulkWrite(operations, { ordered: false }); }
 async function main() {
   const replace = process.argv.includes('--replace');
@@ -116,6 +141,8 @@ async function main() {
     ...recommendedRows.map((row, index) => ({ row, work: workFromRow(row, 'recommended-works', completedRows.length + index) })),
   ];
   const expenditureSummary = allocateExpenditure(workEntries, readCsv('expenditures.csv'), readCsv('mp-summary.csv'));
+  deriveProgressFromExpenditure(workEntries);
+  populateMockProgress(workEntries);
   for (const { key: source, file: filename, storeRaw } of dataSources) {
     const rows = readCsv(filename); let operations = [];
     if (storeRaw !== false) {

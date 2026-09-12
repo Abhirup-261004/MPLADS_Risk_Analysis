@@ -46,6 +46,7 @@ form { display: grid; gap: 1.25rem; } label { color: #171b24; display: grid; fon
 .app-sidebar .sidebar-signout { display: block; width: 100%; background: rgba(242, 181, 184, 0.12); border: 1px solid rgba(242, 181, 184, 0.35); border-radius: 5px; color: #f2b5b8; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; padding: 8px 12px; text-align: center; text-transform: uppercase; cursor: pointer; transition: all 0.15s ease; box-sizing: border-box; }
 .app-sidebar .sidebar-signout:hover { background: rgba(242, 181, 184, 0.22); border-color: #f2b5b8; color: #fff; }
 .mobile-nav-toggle { display: none; }
+.progress-cell { align-items: center; display: flex; gap: 9px; min-width: 112px; }.work-progress-track { background: #d9dee5; border-radius: 999px; display: block; height: 7px; overflow: hidden; width: 72px; }.work-progress-fill { background: #4f637a; border-radius: inherit; display: block; height: 100%; min-width: 0; transition: width .2s ease; }.progress-cell b { background: none; color: #33465e; display: block; font-size: .58rem; font-weight: 800; height: auto; min-width: 29px; }
 .mobile-user-actions { display: none; }
 .mobile-nav-backdrop { display: none; }
 .mobile-drawer-bottom { display: none; }
@@ -574,4 +575,3 @@ form { display: grid; gap: 1.25rem; } label { color: #171b24; display: grid; fon
   .audit-actor-line { flex-wrap: wrap; }
   .audit-actor-line time { margin-left: 0; width: 100%; margin-top: 2px; }
 }
-

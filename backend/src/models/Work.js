@@ -15,6 +15,7 @@ const workSchema = new mongoose.Schema(
     expenditureAmount: { type: Number, required: true, min: 0 },
     expenditureSource: { type: String, enum: ['DIRECT_PAYMENT', 'MP_SUMMARY_ALLOCATION', 'UNAVAILABLE'], default: 'UNAVAILABLE' },
     progress: { type: Number, required: true, min: 0, max: 100 },
+    progressSource: { type: String, enum: ['REPORTED', 'FINANCIAL_UTILIZATION', 'MOCK_ESTIMATE'], default: 'REPORTED' },
     status: { type: String, enum: ['Sanctioned', 'Ongoing', 'Completed', 'Delayed'], required: true, index: true },
     riskLevel: { type: String, enum: ['low', 'medium', 'high'], required: true, index: true },
     riskScore: { type: Number, required: true, min: 0, max: 100 },
