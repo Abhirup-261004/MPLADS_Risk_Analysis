@@ -1,5 +1,12 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
+async function getPublic(path) {
+  const response = await fetch(`${API_URL}${path}`);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || 'Unable to load public data.');
+  return payload;
+}
+
 export async function login(credentials) {
   return sendAuthRequest('/auth/login', credentials);
 }
@@ -44,6 +51,12 @@ function clearExpiredSession() {
 }
 
 export const getDashboardOverview = () => getProtected('/dashboard/overview');
+export const getPublicOverview = () => getPublic('/public/overview');
+export const getPublicFilters = () => getPublic('/public/filters');
+export const getPublicWorks = (params = {}) => getPublic(`/public/works?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== '' && value !== undefined && value !== null)).toString()}`);
+export const getPublicWork = (workId) => getPublic(`/public/works/${encodeURIComponent(workId)}`);
+export const getPublicMap = (params = {}) => getPublic(`/public/map?${new URLSearchParams(Object.entries(params).filter(([, value]) => value)).toString()}`);
+export const getPublicAnalytics = () => getPublic('/public/analytics');
 export const getWorks = (params = {}) => {
   const options = typeof params === 'string' ? { search: params } : params;
   const query = new URLSearchParams({ limit: '25', ...Object.fromEntries(Object.entries(options).filter(([, value]) => value)) });
@@ -189,4 +202,3 @@ export const requestAgencySuspension = (agencyKey, data) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-

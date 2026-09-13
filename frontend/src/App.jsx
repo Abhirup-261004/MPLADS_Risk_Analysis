@@ -13,6 +13,7 @@ import DataRefresh from './components/DataRefresh.jsx';
 import SideNavbar from './components/SideNavbar.jsx';
 import ReviewQueue from './components/ReviewQueue.jsx';
 import Logo from './components/Logo.jsx';
+import PublicViewer from './components/PublicViewer.jsx';
 import { getCurrentUser, getDashboardOverview, getWorks, login, register } from './services/api.js';
 
 function MailIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1" /><path d="m4.5 7 7.5 5.5L19.5 7" /></svg>; }
@@ -49,6 +50,16 @@ function routeFromHash() {
   return { page: validPages.has(path) ? path : 'home', agencyKey: null };
 }
 
+function publicRouteFromHash() {
+  const hash = window.location.hash.replace(/^#\/?/, '');
+  if (!hash || hash === 'viewer') return 'overview';
+  if (hash.startsWith('viewer/')) {
+    const page = hash.slice('viewer/'.length);
+    return new Set(['overview', 'works', 'map', 'analytics', 'about']).has(page) ? page : 'overview';
+  }
+  return null;
+}
+
 function hashForPage(nextPage, agencyKey = null) {
   if (nextPage === 'agency' && agencyKey) return `#/agency-risk/${agencyKey}`;
   if (nextPage === 'agency') return '#/agency-risk';
@@ -72,6 +83,8 @@ export default function App() {
   const [works, setWorks] = useState(null);
   const [selectedWorkId, setSelectedWorkId] = useState(null);
   const [selectedAgencyKey, setSelectedAgencyKey] = useState(initialRoute.agencyKey);
+  const [publicPage, setPublicPage] = useState(publicRouteFromHash() || 'overview');
+  const [currentHash, setCurrentHash] = useState(() => window.location.hash);
 
   useEffect(() => {
     const storedUser = getStoredUser();
@@ -122,6 +135,8 @@ export default function App() {
       const route = routeFromHash();
       setPage(route.page);
       setSelectedAgencyKey(route.agencyKey);
+      setPublicPage(publicRouteFromHash() || 'overview');
+      setCurrentHash(window.location.hash);
     }
     window.addEventListener('hashchange', syncRoute);
     return () => window.removeEventListener('hashchange', syncRoute);
@@ -161,7 +176,7 @@ export default function App() {
     window.location.hash = hashForPage('agency');
   }
 
-  function signOut() { localStorage.removeItem('prahari_token'); localStorage.removeItem('prahari_user'); setUser(null); setPage('home'); setSelectedAgencyKey(null); setPassword(''); window.location.hash = ''; }
+  function signOut() { localStorage.removeItem('prahari_token'); localStorage.removeItem('prahari_user'); setUser(null); setPage('home'); setSelectedAgencyKey(null); setPassword(''); window.location.hash = '#/viewer/overview'; }
   function updateStoredUser(nextUser) { localStorage.setItem('prahari_user', JSON.stringify(nextUser)); setUser(nextUser); }
 
   if (!sessionReady) {
@@ -184,6 +199,9 @@ export default function App() {
     else content = page === 'works' ? <WorksExplorer user={user} works={works} onSignOut={signOut} onNavigate={navigate} onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} /> : <Dashboard user={user} overview={overview} onSignOut={signOut} onNavigate={navigate} />;
     return <div className="authenticated-shell"><SideNavbar user={user} page={page === 'investigation' ? 'works' : page} onNavigate={navigate} onSignOut={signOut} />{content}</div>;
   }
+
+  const isLoginRoute = currentHash.replace(/^#\/?/, '') === 'login';
+  if (!isLoginRoute) return <PublicViewer page={publicPage} onNavigate={(nextPage) => { window.location.hash = `#/viewer/${nextPage}`; }} onLogin={() => { window.location.hash = '#/login'; }} />;
 
   return <main className="portal-page">
     <section className="intelligence-panel">
