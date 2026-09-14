@@ -11,12 +11,14 @@ import { notificationRouter } from './routes/notificationRoutes.js';
 import { dataRefreshRouter } from './routes/dataRefreshRoutes.js';
 import { mlRouter } from './routes/mlRoutes.js';
 import { publicRouter } from './routes/publicRoutes.js';
+import { agencyRouter } from './routes/agencyRoutes.js';
 
 export const app = express();
 app.use(cors({ origin: env.clientUrl }));
 app.use(express.json({ limit: '10kb' }));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/public', publicRouter);
+app.use('/api/agency', agencyRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/works', worksRouter);

@@ -14,6 +14,12 @@ const items = [
   ['analytics', 'Analytics', '\u25a4'],
 ];
 
+const agencyItems = [
+  ['home', 'Agency Portfolio', '\u25a6'],
+  ['works', 'Assigned Works', '\u2315'],
+  ['notifications', 'Notifications', '!'],
+];
+
 export default function SideNavbar({ user, page, onNavigate, onSignOut }) {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = (destination) => {
@@ -32,6 +38,7 @@ export default function SideNavbar({ user, page, onNavigate, onSignOut }) {
   }, [isOpen]);
 
   const initials = (user?.name || 'User').trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+  const navigationItems = user?.profileType === 'agency' || user?.role === 'agency' ? agencyItems : items;
 
   return (
     <>
@@ -50,7 +57,7 @@ export default function SideNavbar({ user, page, onNavigate, onSignOut }) {
           <button className="mobile-nav-toggle" type="button" aria-label="Toggle navigation menu" aria-expanded={isOpen} onClick={() => setIsOpen((open) => !open)}><i /><i /><i /></button>
         </div>
         <nav aria-label="Primary navigation">
-          {items.map(([id, label, icon]) => (
+          {navigationItems.map(([id, label, icon]) => (
             <button className={page === id ? 'active' : ''} key={id} onClick={() => navigate(id)}>
               <i>{icon}</i><span>{label}</span>
             </button>

@@ -1,8 +1,11 @@
 import asyncHandler from 'express-async-handler';
 import { Work } from '../models/Work.js';
+import { workScopeForUser } from '../utils/workScope.js';
 
 export const getOverview = asyncHandler(async (req, res) => {
+  const scope = workScopeForUser(req.user);
   const [summary] = await Work.aggregate([
+    { $match: scope },
     {
       $group: {
         _id: null,
@@ -14,8 +17,8 @@ export const getOverview = asyncHandler(async (req, res) => {
       },
     },
   ]);
-  const riskDistribution = await Work.aggregate([{ $group: { _id: '$riskLevel', value: { $sum: 1 } } }]);
-  const markers = await Work.find({ riskLevel: 'high' }, 'district state riskLevel riskScore coordinates').sort({ riskScore: -1 }).limit(50).lean();
+  const riskDistribution = await Work.aggregate([{ $match: scope }, { $group: { _id: '$riskLevel', value: { $sum: 1 } } }]);
+  const markers = await Work.find({ ...scope, riskLevel: 'high' }, 'district state riskLevel riskScore coordinates').sort({ riskScore: -1 }).limit(50).lean();
   const totals = summary || { totalWorks: 0, totalSanctioned: 0, totalExpenditure: 0, highRiskWorks: 0, delayedWorks: 0 };
   res.json({
     ...totals,

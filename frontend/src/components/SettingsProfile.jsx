@@ -6,9 +6,11 @@ const roleLabels = {
   system_admin: 'System Administrator',
   admin: 'System Administrator',
   ministry: 'Ministry Officer',
+  government_admin: 'Government MPLADS Admin',
   district_authority: 'District Authority',
   analyst: 'Risk Analyst',
   agency: 'Agency User',
+  mp: 'Member of Parliament',
   viewer: 'Viewer',
 };
 const accessByRole = {

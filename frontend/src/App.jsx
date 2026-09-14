@@ -14,6 +14,7 @@ import SideNavbar from './components/SideNavbar.jsx';
 import ReviewQueue from './components/ReviewQueue.jsx';
 import Logo from './components/Logo.jsx';
 import PublicViewer from './components/PublicViewer.jsx';
+import AgencyWorkspace from './components/AgencyWorkspace.jsx';
 import { getCurrentUser, getDashboardOverview, getWorks, login, register } from './services/api.js';
 
 function MailIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1" /><path d="m4.5 7 7.5 5.5L19.5 7" /></svg>; }
@@ -22,12 +23,9 @@ function UserIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle
 function ShieldIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5c-2.2 1.7-4.7 2.5-7 2.8v5.1c0 4.1 2.6 7.6 7 9.1 4.4-1.5 7-5 7-9.1V6.3c-2.3-.3-4.8-1.1-7-2.8Z" /><path d="m9.1 12 2 2 3.8-4" /></svg>; }
 
 const profileTypeOptions = [
-  ['system_admin', 'System Admin'],
-  ['ministry', 'Ministry Officer'],
-  ['district_authority', 'District Authority'],
-  ['analyst', 'Risk Analyst'],
+  ['ministry', 'Government MPLADS Admin'],
+  ['mp', 'Member of Parliament'],
   ['agency', 'Agency User'],
-  ['viewer', 'Viewer'],
 ];
 
 function getStoredUser() {
@@ -81,7 +79,7 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [profileType, setProfileType] = useState('system_admin');
+  const [profileType, setProfileType] = useState('ministry');
   const [organization, setOrganization] = useState('');
   const [designation, setDesignation] = useState('');
   const [phone, setPhone] = useState('');
@@ -211,8 +209,12 @@ export default function App() {
   }
 
   if (user) {
+    const isAgencyUser = user.profileType === 'agency' || user.role === 'agency';
+    const agencyPages = new Set(['home', 'works', 'notifications', 'settings']);
     let content;
-    if (page === 'investigation' && selectedWorkId) content = <WorkInvestigation workId={selectedWorkId} user={user} onSignOut={signOut} onNavigate={navigate} />;
+    if (isAgencyUser && !agencyPages.has(page)) content = <SettingsProfile user={user} onUserUpdate={updateStoredUser} />;
+    else if (isAgencyUser && page === 'home') content = <AgencyWorkspace />;
+    else if (page === 'investigation' && selectedWorkId) content = <WorkInvestigation workId={selectedWorkId} user={user} onSignOut={signOut} onNavigate={navigate} />;
     else if (page === 'review-queue') content = <ReviewQueue user={user} onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} onNavigate={navigate} />;
     else if (page === 'risk') content = <RiskCenter />;
     else if (page === 'ai') content = <AiAnalyst onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} />;

@@ -8,11 +8,14 @@ const PROFILE_TYPE_LABELS = {
   system_admin: 'System Administrator',
   admin: 'System Administrator',
   ministry: 'Ministry Officer',
+  government_admin: 'Government MPLADS Admin',
   district_authority: 'District Authority',
   analyst: 'Risk Analyst',
   agency: 'Agency User',
+  mp: 'Member of Parliament',
   viewer: 'Viewer',
 };
+const SELF_REGISTRATION_TYPES = new Set(['ministry', 'mp', 'agency']);
 
 function normalizeProfileType(value) {
   const rawType = String(value || 'analyst').trim();
@@ -217,6 +220,9 @@ export const register = asyncHandler(async (req, res) => {
   if (!name || !email || !password) return res.status(400).json({ message: 'Name, email, and password are required.' });
 
   const profileType = normalizeProfileType(req.body.profileType || req.body.role);
+  if (!SELF_REGISTRATION_TYPES.has(profileType)) {
+    return res.status(403).json({ message: 'This profile type must be provisioned by a system administrator.' });
+  }
   const user = await User.create({
     name,
     email,

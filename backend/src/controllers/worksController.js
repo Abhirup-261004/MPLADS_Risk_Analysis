@@ -1,9 +1,10 @@
 import asyncHandler from 'express-async-handler';
 import { Work } from '../models/Work.js';
+import { workScopeForUser } from '../utils/workScope.js';
 
 export const getWorks = asyncHandler(async (req, res) => {
   const { search = '', state, district, status, risk, page = 1, limit = 25 } = req.query;
-  const filter = {};
+  const filter = { ...workScopeForUser(req.user) };
   if (state) filter.state = state;
   if (district) filter.district = district;
   if (status) filter.status = status;
@@ -23,14 +24,15 @@ export const getWorks = asyncHandler(async (req, res) => {
 });
 
 export const getFilterOptions = asyncHandler(async (req, res) => {
+  const scope = workScopeForUser(req.user);
   const [states, districts, sectors, agencies] = await Promise.all([
-    Work.distinct('state'), Work.distinct('district'), Work.distinct('sector'), Work.distinct('agency'),
+    Work.distinct('state', scope), Work.distinct('district', scope), Work.distinct('sector', scope), Work.distinct('agency', scope),
   ]);
   res.json({ states: states.filter(Boolean).sort(), districts: districts.filter(Boolean).sort(), sectors: sectors.filter(Boolean).sort(), agencies: agencies.filter(Boolean).sort() });
 });
 
 export const getWorkById = asyncHandler(async (req, res) => {
-  const work = await Work.findOne({ workId: req.params.workId }).lean();
+  const work = await Work.findOne({ ...workScopeForUser(req.user), workId: req.params.workId }).lean();
   if (!work) return res.status(404).json({ message: 'Work not found.' });
   const expenditureRatio = work.sanctionedAmount ? Number(((work.expenditureAmount / work.sanctionedAmount) * 100).toFixed(1)) : 0;
   const assessment = {
@@ -51,7 +53,7 @@ export const getWorkById = asyncHandler(async (req, res) => {
 });
 
 export const markUnderReview = asyncHandler(async (req, res) => {
-  const work = await Work.findOneAndUpdate({ workId: req.params.workId }, { underReview: true }, { new: true }).lean();
+  const work = await Work.findOneAndUpdate({ ...workScopeForUser(req.user), workId: req.params.workId }, { underReview: true }, { new: true }).lean();
   if (!work) return res.status(404).json({ message: 'Work not found.' });
   res.json({ work });
 });
