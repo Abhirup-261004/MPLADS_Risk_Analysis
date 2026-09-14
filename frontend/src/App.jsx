@@ -21,6 +21,15 @@ function LockIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x
 function UserIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M5.5 20c.5-3.3 2.6-5 6.5-5s6 1.7 6.5 5" /></svg>; }
 function ShieldIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5c-2.2 1.7-4.7 2.5-7 2.8v5.1c0 4.1 2.6 7.6 7 9.1 4.4-1.5 7-5 7-9.1V6.3c-2.3-.3-4.8-1.1-7-2.8Z" /><path d="m9.1 12 2 2 3.8-4" /></svg>; }
 
+const profileTypeOptions = [
+  ['system_admin', 'System Admin'],
+  ['ministry', 'Ministry Officer'],
+  ['district_authority', 'District Authority'],
+  ['analyst', 'Risk Analyst'],
+  ['agency', 'Agency User'],
+  ['viewer', 'Viewer'],
+];
+
 function getStoredUser() {
   try {
     const storedUser = JSON.parse(localStorage.getItem('prahari_user') || 'null');
@@ -72,6 +81,13 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [profileType, setProfileType] = useState('system_admin');
+  const [organization, setOrganization] = useState('');
+  const [designation, setDesignation] = useState('');
+  const [phone, setPhone] = useState('');
+  const [agencyName, setAgencyName] = useState('');
+  const [stateName, setStateName] = useState('');
+  const [district, setDistrict] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -149,7 +165,18 @@ export default function App() {
         throw new Error('Passwords do not match.');
       }
       const data = isSignUp
-        ? await register({ name, email, password })
+        ? await register({
+          name,
+          email,
+          password,
+          profileType,
+          organization,
+          designation,
+          phone,
+          agencyName,
+          state: stateName,
+          district,
+        })
         : await login({ email, password });
       localStorage.setItem('prahari_token', data.token);
       localStorage.setItem('prahari_user', JSON.stringify(data.user));
@@ -215,6 +242,15 @@ export default function App() {
         <form onSubmit={handleSubmit} noValidate>
           {isSignUp && <label>Full Name<span className="input-shell"><UserIcon /><input type="text" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Your full name" required /></span></label>}
           <label>Official Email<span className="input-shell"><MailIcon /><input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="officer@nic.in" required /></span></label>
+          {isSignUp && <label>Profile Type<span className="input-shell"><ShieldIcon /><select value={profileType} onChange={(event) => setProfileType(event.target.value)}>{profileTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></span></label>}
+          {isSignUp && <div className="register-profile-grid">
+            <label>Organization<span className="input-shell"><UserIcon /><input value={organization} onChange={(event) => setOrganization(event.target.value)} placeholder="Ministry, department or agency" /></span></label>
+            <label>Designation<span className="input-shell"><ShieldIcon /><input value={designation} onChange={(event) => setDesignation(event.target.value)} placeholder="Official designation" /></span></label>
+            <label>Phone<span className="input-shell"><UserIcon /><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Official contact number" /></span></label>
+            <label>State<span className="input-shell"><ShieldIcon /><input value={stateName} onChange={(event) => setStateName(event.target.value)} placeholder="Assigned state" /></span></label>
+            <label>District<span className="input-shell"><ShieldIcon /><input value={district} onChange={(event) => setDistrict(event.target.value)} placeholder="Assigned district" /></span></label>
+            {profileType === 'agency' && <label>Agency Name<span className="input-shell"><UserIcon /><input value={agencyName} onChange={(event) => setAgencyName(event.target.value)} placeholder="Implementing agency name" /></span></label>}
+          </div>}
           <label className="password-label"><span>Password {!isSignUp && <button type="button" className="forgot-button">Forgot?</button>}</span><span className="input-shell"><LockIcon /><input type={showPassword ? 'text' : 'password'} autoComplete={isSignUp ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={isSignUp ? 'At least 8 characters' : 'Enter your password'} minLength="8" required /><button type="button" className="visibility-button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? 'Hide' : 'Show'}</button></span></label>
           {isSignUp && <label>Confirm Password<span className="input-shell"><LockIcon /><input type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter your password" minLength="8" required /></span></label>}
           <div className="security-strip"><ShieldIcon /><span>Security protocol enforced</span><i /></div>

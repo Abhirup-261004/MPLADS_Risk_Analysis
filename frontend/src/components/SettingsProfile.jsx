@@ -2,10 +2,22 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Logo from './Logo.jsx';
 import { changePassword, getCurrentUser, updateProfile, updateSettings } from '../services/api.js';
 
-const roleLabels = { admin: 'Administrator', analyst: 'Analyst', viewer: 'Viewer' };
+const roleLabels = {
+  system_admin: 'System Administrator',
+  admin: 'System Administrator',
+  ministry: 'Ministry Officer',
+  district_authority: 'District Authority',
+  analyst: 'Risk Analyst',
+  agency: 'Agency User',
+  viewer: 'Viewer',
+};
 const accessByRole = {
-  admin: ['Dashboard', 'Risk Intelligence', 'Works Explorer', 'Analytics', 'Reports', 'Notifications', 'Settings'],
+  system_admin: ['User Governance', 'Dashboard', 'Risk Intelligence', 'Works Explorer', 'Analytics', 'Reports', 'Notifications', 'Settings'],
+  admin: ['User Governance', 'Dashboard', 'Risk Intelligence', 'Works Explorer', 'Analytics', 'Reports', 'Notifications', 'Settings'],
+  ministry: ['Dashboard', 'Risk Intelligence', 'Review Queue', 'Analytics', 'Reports', 'Notifications', 'Settings'],
+  district_authority: ['Dashboard', 'Works Explorer', 'Review Queue', 'Map Intelligence', 'Reports', 'Notifications', 'Settings'],
   analyst: ['Dashboard', 'Risk Intelligence', 'Works Explorer', 'Analytics', 'Reports', 'Notifications', 'Settings'],
+  agency: ['Agency Profile', 'Assigned Works', 'Appeals', 'Reports', 'Notifications', 'Settings'],
   viewer: ['Dashboard', 'Works Explorer', 'Reports', 'Notifications', 'Settings'],
 };
 const defaultPreferences = { defaultFinancialYear: 'FY 2024-2025', defaultState: '', defaultNotificationView: 'all', itemsPerPage: 25 };
@@ -47,13 +59,76 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? 'Not available' : date.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatAmount(value) {
+  return `Rs ${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 1 })} L`;
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString('en-IN');
+}
+
 function SettingsSkeleton() {
   return <section className="settings-skeleton" aria-hidden="true"><article /><article /><article /></section>;
 }
 
+function WorkList({ title, works }) {
+  if (!works?.length) return null;
+  return <section className="profile-work-list"><h3>{title}</h3><table><thead><tr><th>Work</th><th>Location</th><th>Progress</th><th>Risk</th></tr></thead><tbody>{works.map((work) => <tr key={work.workId}><td><b>{work.title}</b><small>{work.workId}</small></td><td>{work.district}<small>{work.state}</small></td><td>{work.progress}%<small>{work.status}</small></td><td><span className={`profile-risk ${work.riskLevel}`}>{work.riskScore}</span></td></tr>)}</tbody></table></section>;
+}
+
+function SystemAdminProfile({ data }) {
+  if (!data?.summary) return null;
+  return <section className="settings-section profile-data-section">
+    <header><Icon name="shield" /><div><h2>System Admin Profile</h2><p>Operational account, risk, and work coverage fetched under this authenticated session.</p></div></header>
+    <div className="profile-kpis">
+      <article><span>Total Works</span><strong>{formatNumber(data.summary.totalWorks)}</strong></article>
+      <article><span>High Risk</span><strong>{formatNumber(data.summary.highRiskWorks)}</strong></article>
+      <article><span>Under Review</span><strong>{formatNumber(data.summary.underReviewWorks)}</strong></article>
+      <article><span>Fund Utilization</span><strong>{data.summary.fundUtilization}%</strong></article>
+    </div>
+    <div className="profile-data-grid">
+      <article><h3>Registered Profile Types</h3>{data.roleCounts?.map((item) => <p key={item.profileType}><span>{item.label}</span><strong>{formatNumber(item.users)}</strong></p>)}</article>
+      <article><h3>Risk Distribution</h3>{data.riskCounts?.map((item) => <p key={item.riskLevel}><span>{item.riskLevel}</span><strong>{formatNumber(item.works)}</strong></p>)}</article>
+    </div>
+    <WorkList title="Highest Risk Works" works={data.recentHighRiskWorks} />
+  </section>;
+}
+
+function AgencyPortfolio({ data }) {
+  if (!data) return null;
+  if (!data.configured) {
+    return <section className="settings-section profile-data-section"><header><Icon name="shield" /><div><h2>Agency Profile</h2><p>{data.message}</p></div></header></section>;
+  }
+  return <section className="settings-section profile-data-section">
+    <header><Icon name="shield" /><div><h2>Agency Profile</h2><p>Assigned agency work, financial utilization, and risk records fetched from the authenticated backend.</p></div></header>
+    <div className="profile-kpis">
+      <article><span>Total Works</span><strong>{formatNumber(data.summary.totalWorks)}</strong></article>
+      <article><span>High Risk</span><strong>{formatNumber(data.summary.highRiskWorks)}</strong></article>
+      <article><span>Avg Progress</span><strong>{data.summary.averageProgress}%</strong></article>
+      <article><span>Utilization</span><strong>{data.summary.utilizationPct}%</strong></article>
+    </div>
+    <div className="profile-data-grid">
+      <article><h3>Financial Coverage</h3><p><span>Sanctioned</span><strong>{formatAmount(data.summary.sanctionedAmount)}</strong></p><p><span>Expenditure</span><strong>{formatAmount(data.summary.expenditureAmount)}</strong></p></article>
+      <article><h3>Implementation Status</h3><p><span>Completed</span><strong>{formatNumber(data.summary.completedWorks)}</strong></p><p><span>Delayed</span><strong>{formatNumber(data.summary.delayedWorks)}</strong></p></article>
+    </div>
+    <WorkList title="Priority Agency Works" works={data.highRiskWorks} />
+    <WorkList title="Recent Agency Works" works={data.recentWorks} />
+  </section>;
+}
+
 export default function SettingsProfile({ user, onUserUpdate }) {
   const [profile, setProfile] = useState(() => normalizeUser(user));
-  const [profileForm, setProfileForm] = useState({ name: user.name || '', email: user.email || '' });
+  const [profileData, setProfileData] = useState({});
+  const [profileForm, setProfileForm] = useState({
+    name: user.name || '',
+    email: user.email || '',
+    organization: user.organization || '',
+    designation: user.designation || '',
+    phone: user.phone || '',
+    agencyName: user.agencyName || '',
+    state: user.state || '',
+    district: user.district || '',
+  });
   const [preferences, setPreferences] = useState(() => normalizeUser(user).preferences);
   const [notificationPreferences, setNotificationPreferences] = useState(() => normalizeUser(user).notificationPreferences);
   const [loading, setLoading] = useState(true);
@@ -74,7 +149,17 @@ export default function SettingsProfile({ user, onUserUpdate }) {
         if (!active()) return;
         const safeUser = normalizeUser(data.user);
         setProfile(safeUser);
-        setProfileForm({ name: safeUser.name || '', email: safeUser.email || '' });
+        setProfileData(data.profileData || {});
+        setProfileForm({
+          name: safeUser.name || '',
+          email: safeUser.email || '',
+          organization: safeUser.organization || '',
+          designation: safeUser.designation || '',
+          phone: safeUser.phone || '',
+          agencyName: safeUser.agencyName || '',
+          state: safeUser.state || '',
+          district: safeUser.district || '',
+        });
         setPreferences(safeUser.preferences);
         setNotificationPreferences(safeUser.notificationPreferences);
         onUserUpdate(safeUser);
@@ -89,9 +174,22 @@ export default function SettingsProfile({ user, onUserUpdate }) {
     return () => { active = false; };
   }, []);
 
-  const profileChanged = profileForm.name.trim() !== profile.name || profileForm.email.trim().toLowerCase() !== profile.email;
+  const profileChanged = [
+    ['name', profile.name],
+    ['email', profile.email],
+    ['organization', profile.organization],
+    ['designation', profile.designation],
+    ['phone', profile.phone],
+    ['agencyName', profile.agencyName],
+    ['state', profile.state],
+    ['district', profile.district],
+  ].some(([key, value]) => {
+    const nextValue = key === 'email' ? profileForm[key].trim().toLowerCase() : profileForm[key].trim();
+    return nextValue !== (value || '');
+  });
   const settingsChanged = useMemo(() => JSON.stringify(preferences) !== JSON.stringify(profile.preferences) || JSON.stringify(notificationPreferences) !== JSON.stringify(profile.notificationPreferences), [notificationPreferences, preferences, profile]);
-  const access = accessByRole[profile.role] || accessByRole.viewer;
+  const profileType = profile.profileType || profile.role;
+  const access = accessByRole[profileType] || accessByRole.viewer;
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -99,10 +197,29 @@ export default function SettingsProfile({ user, onUserUpdate }) {
     setError('');
     setMessage('');
     try {
-      const data = await updateProfile({ name: profileForm.name.trim(), email: profileForm.email.trim().toLowerCase() });
+      const data = await updateProfile({
+        name: profileForm.name.trim(),
+        email: profileForm.email.trim().toLowerCase(),
+        organization: profileForm.organization.trim(),
+        designation: profileForm.designation.trim(),
+        phone: profileForm.phone.trim(),
+        agencyName: profileForm.agencyName.trim(),
+        state: profileForm.state.trim(),
+        district: profileForm.district.trim(),
+      });
       const safeUser = normalizeUser(data.user);
       setProfile(safeUser);
-      setProfileForm({ name: safeUser.name, email: safeUser.email });
+      setProfileData(data.profileData || {});
+      setProfileForm({
+        name: safeUser.name,
+        email: safeUser.email,
+        organization: safeUser.organization || '',
+        designation: safeUser.designation || '',
+        phone: safeUser.phone || '',
+        agencyName: safeUser.agencyName || '',
+        state: safeUser.state || '',
+        district: safeUser.district || '',
+      });
       onUserUpdate(safeUser);
       setMessage('Changes saved successfully.');
     } catch (requestError) {
@@ -121,6 +238,7 @@ export default function SettingsProfile({ user, onUserUpdate }) {
       const data = await updateSettings({ preferences, notificationPreferences });
       const safeUser = normalizeUser(data.user);
       setProfile(safeUser);
+      setProfileData(data.profileData || {});
       setPreferences(safeUser.preferences);
       setNotificationPreferences(safeUser.notificationPreferences);
       onUserUpdate(safeUser);
@@ -169,17 +287,19 @@ export default function SettingsProfile({ user, onUserUpdate }) {
       {loading && <SettingsSkeleton />}
       {error && !loading && <section className="settings-state"><Icon name="shield" /><h2>Unable to load profile</h2><p>Please try again.</p><button onClick={() => loadProfile()}>Retry</button></section>}
       {!loading && !error && <div className="settings-grid">
-        <aside className="profile-card"><span className="profile-avatar">{profile.name?.charAt(0) || 'P'}</span><h2>{profile.name}</h2><p>{profile.email}</p><b>{roleLabels[profile.role] || profile.role}</b><small><i /> {profile.isActive ? 'Account Active' : 'Account Inactive'}</small><dl><div><dt>Organization</dt><dd>Not configured</dd></div><div><dt>State</dt><dd>{profile.preferences.defaultState || 'All states'}</dd></div></dl><button onClick={() => document.querySelector('#profile-information')?.scrollIntoView({ behavior: 'smooth' })}>Edit Profile</button></aside>
+        <aside className="profile-card"><span className="profile-avatar">{profile.name?.charAt(0) || 'P'}</span><h2>{profile.name}</h2><p>{profile.email}</p><b>{roleLabels[profileType] || profileType}</b><small><i /> {profile.isActive ? 'Account Active' : 'Account Inactive'}</small><dl><div><dt>Organization</dt><dd>{profile.organization || 'Not configured'}</dd></div><div><dt>State</dt><dd>{profile.state || profile.preferences.defaultState || 'All states'}</dd></div><div><dt>Agency</dt><dd>{profile.agencyName || 'Not assigned'}</dd></div></dl><button onClick={() => document.querySelector('#profile-information')?.scrollIntoView({ behavior: 'smooth' })}>Edit Profile</button></aside>
         <section className="settings-main">
           {message && <p className="settings-success" role="status">{message}</p>}
+          {profileData.systemAdmin && <SystemAdminProfile data={profileData.systemAdmin} />}
+          {profileData.agency && <AgencyPortfolio data={profileData.agency} />}
           <form className="settings-section" id="profile-information" onSubmit={saveProfile}>
             <header><Icon name="user" /><div><h2>Profile Information</h2><p>Official identity details used across PRAHARI AI.</p></div></header>
-            <div className="settings-fields"><label>Full Name<input value={profileForm.name} onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))} required /></label><label>Email<input type="email" value={profileForm.email} onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))} required /></label><label>Role<input value={roleLabels[profile.role] || profile.role} readOnly /></label><label>Account Status<input value={profile.isActive ? 'Active' : 'Inactive'} readOnly /></label></div>
-            <footer><button type="button" disabled={!profileChanged || savingProfile} onClick={() => setProfileForm({ name: profile.name, email: profile.email })}>Cancel</button><button className="primary" disabled={!profileChanged || savingProfile}>{savingProfile ? 'Saving...' : 'Save Changes'}</button></footer>
+            <div className="settings-fields"><label>Full Name<input value={profileForm.name} onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))} required /></label><label>Email<input type="email" value={profileForm.email} onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))} required /></label><label>Profile Type<input value={roleLabels[profileType] || profileType} readOnly /></label><label>Account Status<input value={profile.isActive ? 'Active' : 'Inactive'} readOnly /></label><label>Organization<input value={profileForm.organization} onChange={(event) => setProfileForm((current) => ({ ...current, organization: event.target.value }))} placeholder="Ministry, department or agency" /></label><label>Designation<input value={profileForm.designation} onChange={(event) => setProfileForm((current) => ({ ...current, designation: event.target.value }))} placeholder="Official designation" /></label><label>Phone<input value={profileForm.phone} onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))} placeholder="Official contact number" /></label><label>Agency Name<input value={profileForm.agencyName} onChange={(event) => setProfileForm((current) => ({ ...current, agencyName: event.target.value }))} placeholder="Assigned implementing agency" /></label><label>State<input value={profileForm.state} onChange={(event) => setProfileForm((current) => ({ ...current, state: event.target.value }))} placeholder="Assigned state" /></label><label>District<input value={profileForm.district} onChange={(event) => setProfileForm((current) => ({ ...current, district: event.target.value }))} placeholder="Assigned district" /></label></div>
+            <footer><button type="button" disabled={!profileChanged || savingProfile} onClick={() => setProfileForm({ name: profile.name, email: profile.email, organization: profile.organization || '', designation: profile.designation || '', phone: profile.phone || '', agencyName: profile.agencyName || '', state: profile.state || '', district: profile.district || '' })}>Cancel</button><button className="primary" disabled={!profileChanged || savingProfile}>{savingProfile ? 'Saving...' : 'Save Changes'}</button></footer>
           </form>
           <section className="settings-section">
             <header><Icon name="shield" /><div><h2>Role &amp; Access</h2><p>Your current role is managed by an administrator.</p></div></header>
-            <div className="access-panel-settings"><article><span>Current Role</span><strong>{roleLabels[profile.role] || profile.role}</strong></article><ul>{access.map((item) => <li key={item}>{'\u2713'} {item}</li>)}</ul></div>
+            <div className="access-panel-settings"><article><span>Current Profile</span><strong>{roleLabels[profileType] || profileType}</strong></article><ul>{access.map((item) => <li key={item}>{'\u2713'} {item}</li>)}</ul></div>
           </section>
           <form className="settings-section" onSubmit={saveSettings}>
             <header><Icon name="shield" /><div><h2>Application Preferences</h2><p>Defaults used for monitoring views and notification lists.</p></div></header>

@@ -1,6 +1,201 @@
 import asyncHandler from 'express-async-handler';
-import { User } from '../models/User.js';
+import { User, PROFILE_TYPES } from '../models/User.js';
+import { Work } from '../models/Work.js';
 import { createToken } from '../utils/token.js';
+
+const SYSTEM_ADMIN_ALIASES = new Set(['admin', 'system_admin', 'system-admin', 'System Administrator']);
+const PROFILE_TYPE_LABELS = {
+  system_admin: 'System Administrator',
+  admin: 'System Administrator',
+  ministry: 'Ministry Officer',
+  district_authority: 'District Authority',
+  analyst: 'Risk Analyst',
+  agency: 'Agency User',
+  viewer: 'Viewer',
+};
+
+function normalizeProfileType(value) {
+  const rawType = String(value || 'analyst').trim();
+  const profileType = rawType.toLowerCase().replace(/[\s-]+/g, '_');
+  if (SYSTEM_ADMIN_ALIASES.has(rawType) || SYSTEM_ADMIN_ALIASES.has(profileType)) return 'system_admin';
+
+  return PROFILE_TYPES.includes(profileType) ? profileType : 'analyst';
+}
+
+function cleanText(value, maxLength = 120) {
+  return String(value || '').trim().slice(0, maxLength);
+}
+
+function buildSafeUser(user) {
+  const safeUser = user.toSafeObject();
+  safeUser.roleLabel = PROFILE_TYPE_LABELS[safeUser.profileType] || safeUser.profileType;
+  return safeUser;
+}
+
+function compactWork(work) {
+  return {
+    workId: work.workId,
+    title: work.title,
+    state: work.state,
+    district: work.district,
+    agency: work.agency,
+    sector: work.sector,
+    sanctionedAmount: work.sanctionedAmount,
+    expenditureAmount: work.expenditureAmount,
+    progress: work.progress,
+    status: work.status,
+    riskLevel: work.riskLevel,
+    riskScore: work.riskScore,
+    alert: work.alert,
+    riskStatus: work.riskStatus,
+    underReview: work.underReview,
+    updatedAt: work.updatedAt,
+  };
+}
+
+async function getAgencyProfileData(user) {
+  const filter = {};
+  if (user.agencyName) filter.agency = user.agencyName;
+  if (user.state) filter.state = user.state;
+  if (user.district) filter.district = user.district;
+
+  if (!Object.keys(filter).length) {
+    return {
+      configured: false,
+      message: 'Agency, state, or district is not configured for this profile.',
+      summary: null,
+      highRiskWorks: [],
+      recentWorks: [],
+    };
+  }
+
+  const [summaryRow, highRiskWorks, recentWorks] = await Promise.all([
+    Work.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalWorks: { $sum: 1 },
+          completedWorks: { $sum: { $cond: [{ $eq: ['$status', 'Completed'] }, 1, 0] } },
+          delayedWorks: { $sum: { $cond: [{ $eq: ['$status', 'Delayed'] }, 1, 0] } },
+          highRiskWorks: { $sum: { $cond: [{ $eq: ['$riskLevel', 'high'] }, 1, 0] } },
+          sanctionedAmount: { $sum: '$sanctionedAmount' },
+          expenditureAmount: { $sum: '$expenditureAmount' },
+          averageProgress: { $avg: '$progress' },
+          averageRiskScore: { $avg: '$riskScore' },
+        },
+      },
+    ]),
+    Work.find(filter, 'workId title state district agency sector sanctionedAmount expenditureAmount progress status riskLevel riskScore alert riskStatus underReview updatedAt')
+      .sort({ riskScore: -1, updatedAt: -1 })
+      .limit(8)
+      .lean(),
+    Work.find(filter, 'workId title state district agency sector sanctionedAmount expenditureAmount progress status riskLevel riskScore alert riskStatus underReview updatedAt')
+      .sort({ updatedAt: -1 })
+      .limit(8)
+      .lean(),
+  ]);
+
+  const summary = summaryRow[0] || {
+    totalWorks: 0,
+    completedWorks: 0,
+    delayedWorks: 0,
+    highRiskWorks: 0,
+    sanctionedAmount: 0,
+    expenditureAmount: 0,
+    averageProgress: 0,
+    averageRiskScore: 0,
+  };
+
+  return {
+    configured: true,
+    filter,
+    summary: {
+      totalWorks: summary.totalWorks,
+      completedWorks: summary.completedWorks,
+      delayedWorks: summary.delayedWorks,
+      highRiskWorks: summary.highRiskWorks,
+      sanctionedAmount: Number((summary.sanctionedAmount || 0).toFixed(2)),
+      expenditureAmount: Number((summary.expenditureAmount || 0).toFixed(2)),
+      utilizationPct: summary.sanctionedAmount
+        ? Number(((summary.expenditureAmount / summary.sanctionedAmount) * 100).toFixed(1))
+        : 0,
+      averageProgress: Number((summary.averageProgress || 0).toFixed(1)),
+      averageRiskScore: Math.round(summary.averageRiskScore || 0),
+    },
+    highRiskWorks: highRiskWorks.map(compactWork),
+    recentWorks: recentWorks.map(compactWork),
+  };
+}
+
+async function getSystemAdminProfileData() {
+  const [summaryRow, roleCounts, riskCounts, recentHighRiskWorks] = await Promise.all([
+    Work.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalWorks: { $sum: 1 },
+          totalSanctioned: { $sum: '$sanctionedAmount' },
+          totalExpenditure: { $sum: '$expenditureAmount' },
+          highRiskWorks: { $sum: { $cond: [{ $eq: ['$riskLevel', 'high'] }, 1, 0] } },
+          underReviewWorks: { $sum: { $cond: ['$underReview', 1, 0] } },
+          delayedWorks: { $sum: { $cond: [{ $eq: ['$status', 'Delayed'] }, 1, 0] } },
+        },
+      },
+    ]),
+    User.aggregate([{ $group: { _id: '$profileType', users: { $sum: 1 } } }, { $sort: { users: -1 } }]),
+    Work.aggregate([{ $group: { _id: '$riskLevel', works: { $sum: 1 } } }, { $sort: { works: -1 } }]),
+    Work.find({}, 'workId title state district agency sector sanctionedAmount expenditureAmount progress status riskLevel riskScore alert riskStatus underReview updatedAt')
+      .sort({ riskScore: -1, updatedAt: -1 })
+      .limit(10)
+      .lean(),
+  ]);
+
+  const summary = summaryRow[0] || {
+    totalWorks: 0,
+    totalSanctioned: 0,
+    totalExpenditure: 0,
+    highRiskWorks: 0,
+    underReviewWorks: 0,
+    delayedWorks: 0,
+  };
+
+  return {
+    summary: {
+      totalWorks: summary.totalWorks,
+      totalSanctioned: Number((summary.totalSanctioned || 0).toFixed(2)),
+      totalExpenditure: Number((summary.totalExpenditure || 0).toFixed(2)),
+      fundUtilization: summary.totalSanctioned
+        ? Number(((summary.totalExpenditure / summary.totalSanctioned) * 100).toFixed(1))
+        : 0,
+      highRiskWorks: summary.highRiskWorks,
+      underReviewWorks: summary.underReviewWorks,
+      delayedWorks: summary.delayedWorks,
+    },
+    roleCounts: roleCounts.map(({ _id, users }) => ({
+      profileType: _id || 'analyst',
+      label: PROFILE_TYPE_LABELS[_id] || _id || 'Risk Analyst',
+      users,
+    })),
+    riskCounts: riskCounts.map(({ _id, works }) => ({ riskLevel: _id || 'unknown', works })),
+    recentHighRiskWorks: recentHighRiskWorks.map(compactWork),
+  };
+}
+
+async function buildAuthenticatedProfilePayload(user) {
+  const safeUser = buildSafeUser(user);
+  const profileType = safeUser.profileType || safeUser.role;
+
+  if (profileType === 'agency') {
+    return { user: safeUser, profileData: { agency: await getAgencyProfileData(user) } };
+  }
+
+  if (profileType === 'system_admin' || profileType === 'admin') {
+    return { user: safeUser, profileData: { systemAdmin: await getSystemAdminProfileData() } };
+  }
+
+  return { user: safeUser, profileData: {} };
+}
 
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -13,18 +208,35 @@ export const login = asyncHandler(async (req, res) => {
 
   user.lastLoginAt = new Date();
   await user.save({ validateBeforeSave: false });
-  res.json({ token: createToken(user._id.toString()), user: user.toSafeObject() });
+  const payload = await buildAuthenticatedProfilePayload(user);
+  res.json({ token: createToken(user._id.toString()), ...payload });
 });
 
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) return res.status(400).json({ message: 'Name, email, and password are required.' });
-  const user = await User.create({ name, email, password });
-  res.status(201).json({ token: createToken(user._id.toString()), user: user.toSafeObject() });
+
+  const profileType = normalizeProfileType(req.body.profileType || req.body.role);
+  const user = await User.create({
+    name,
+    email,
+    password,
+    role: profileType,
+    profileType,
+    organization: cleanText(req.body.organization),
+    designation: cleanText(req.body.designation),
+    phone: cleanText(req.body.phone, 30),
+    agencyName: cleanText(req.body.agencyName || req.body.organization, 160),
+    state: cleanText(req.body.state, 80),
+    district: cleanText(req.body.district, 80),
+  });
+
+  const payload = await buildAuthenticatedProfilePayload(user);
+  res.status(201).json({ token: createToken(user._id.toString()), ...payload });
 });
 
 export const getCurrentUser = asyncHandler(async (req, res) => {
-  res.json({ user: req.user.toSafeObject() });
+  res.json(await buildAuthenticatedProfilePayload(req.user));
 });
 
 export const updateProfile = asyncHandler(async (req, res) => {
@@ -40,9 +252,15 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   req.user.name = name;
   req.user.email = email;
+  req.user.organization = cleanText(req.body.organization ?? req.user.organization);
+  req.user.designation = cleanText(req.body.designation ?? req.user.designation);
+  req.user.phone = cleanText(req.body.phone ?? req.user.phone, 30);
+  req.user.agencyName = cleanText(req.body.agencyName ?? req.user.agencyName, 160);
+  req.user.state = cleanText(req.body.state ?? req.user.state, 80);
+  req.user.district = cleanText(req.body.district ?? req.user.district, 80);
   await req.user.save();
 
-  res.json({ user: req.user.toSafeObject() });
+  res.json(await buildAuthenticatedProfilePayload(req.user));
 });
 
 export const updateSettings = asyncHandler(async (req, res) => {
@@ -71,7 +289,7 @@ export const updateSettings = asyncHandler(async (req, res) => {
   });
 
   await req.user.save({ validateModifiedOnly: true });
-  res.json({ user: req.user.toSafeObject() });
+  res.json(await buildAuthenticatedProfilePayload(req.user));
 });
 
 export const changePassword = asyncHandler(async (req, res) => {

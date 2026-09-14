@@ -15,7 +15,7 @@ export const authorizeRoles = (...roles) => {
 };
 
 // Convenience helpers
-export const REVIEWER_ROLES = ['admin', 'ministry', 'district_authority', 'analyst'];
-export const MINISTRY_ROLES = ['admin', 'ministry'];
-export const ALL_ROLES = ['admin', 'ministry', 'district_authority', 'analyst', 'viewer'];
+export const REVIEWER_ROLES = ['system_admin', 'admin', 'ministry', 'district_authority', 'analyst'];
+export const MINISTRY_ROLES = ['system_admin', 'admin', 'ministry'];
+export const ALL_ROLES = ['system_admin', 'admin', 'ministry', 'district_authority', 'analyst', 'agency', 'viewer'];
 

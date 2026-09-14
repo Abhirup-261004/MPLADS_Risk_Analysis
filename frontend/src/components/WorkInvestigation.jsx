@@ -151,7 +151,7 @@ export default function WorkInvestigation({ workId, user, onNavigate, onSignOut 
   if (!data) return <main className="investigation-loading">Loading work investigation...</main>;
 
   const { work, assessment } = data;
-  const isReviewer = ['admin', 'ministry', 'district_authority', 'analyst'].includes(user?.role);
+  const isReviewer = ['system_admin', 'admin', 'ministry', 'district_authority', 'analyst'].includes(user?.role);
   const currentRiskStatus = work.riskStatus || (work.underReview ? 'UNDER_REVIEW' : work.riskLevel === 'high' ? 'FLAGGED' : 'ACTIVE');
   const sla = workflowInfo?.sla || { daysRemaining: null, isOverdue: false, label: 'Standard 15-day SLA' };
 
