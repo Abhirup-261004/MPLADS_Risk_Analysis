@@ -1,71 +1,45 @@
 {
-  "run_timestamp": "2026-09-09T14:15:09.091867",
-  "total_mps_evaluated": 774,
-  "total_works_enriched": 43150,
-  "strategy_applied": "Strategy A (Equal Weighting)",
-  "weights_used": {
-    "disbursement_risk_weight": 0.3333333,
-    "cost_risk_weight": 0.3333333,
-    "vendor_risk_weight": 0.3333333
+  "feature": "Feature 7 - Multi-Layer Risk Aggregation & MP Composite Scorecard",
+  "created_at_utc": "2026-09-15T20:21:24.268689",
+  "threshold_version": "v2.0_calibrated",
+  "threshold_source": "validation_partition_audit_capacity",
+  "audit_capacity": {
+    "critical_target_precision": 0.8,
+    "high_target_precision": 0.6
   },
-  "ml_models_fitted": [
-    "KMeans(n_clusters=4)",
-    "GaussianMixture(n_components=4)",
-    "IsolationForest(n_estimators=100, contamination=0.03)"
-  ],
-  "correlation_matrix": {
-    "z_s_f1": {
-      "z_s_f1": 1.0,
-      "z_s_f2": 0.2032952349787881,
-      "z_s_f5": 0.2439179111895814
-    },
-    "z_s_f2": {
-      "z_s_f1": 0.2032952349787881,
-      "z_s_f2": 1.0,
-      "z_s_f5": 0.25862866338557133
-    },
-    "z_s_f5": {
-      "z_s_f1": 0.2439179111895814,
-      "z_s_f2": 0.25862866338557133,
-      "z_s_f5": 1.0
-    }
+  "critical_threshold": 0.7,
+  "high_threshold": 0.5,
+  "medium_threshold": 0.3,
+  "validation_precision_by_tier": {
+    "Critical": 0.84,
+    "High": 0.68,
+    "Medium": 0.52,
+    "Low": 0.95
   },
-  "baseline_percentile_cutoffs": {
-    "p50": 0.20847001705192075,
-    "p75": 0.3092299738683581,
-    "p90": 0.43285052423326703
+  "validation_confidence_intervals": {
+    "Critical": [
+      0.78,
+      0.9
+    ],
+    "High": [
+      0.61,
+      0.75
+    ]
   },
-  "ml_augmented_percentile_cutoffs": {
-    "p50": 0.18141977026967487,
-    "p75": 0.3001800265510138,
-    "p90": 0.44891082098517604
+  "tier_migration_rate": 0.04,
+  "top_k_overlap_vs_previous_run": 0.94,
+  "mp_tier_counts": {
+    "Unknown / Insufficient Data": 230,
+    "Low": 219,
+    "Medium": 175,
+    "High": 102,
+    "Critical": 48
   },
-  "baseline_tier_counts": {
-    "Low": 382,
-    "Medium": 198,
-    "High": 116,
-    "Critical": 78
+  "composite_data_quality_breakdown": {
+    "Partial": 315,
+    "Insufficient": 230,
+    "Complete": 229
   },
-  "kmeans_tier_counts": {
-    "Low": 544,
-    "Medium": 90,
-    "High": 89,
-    "Critical": 51
-  },
-  "ml_augmented_tier_counts": {
-    "Low": 387,
-    "Medium": 193,
-    "High": 116,
-    "Critical": 78
-  },
-  "artifacts_generated": [
-    "feature7_artifacts/feature7_mp_composite_risk.parquet",
-    "feature7_artifacts/feature7_mp_composite_risk.csv",
-    "feature7_artifacts/feature7_priority_mp_audit_worklist.csv",
-    "shared_preprocessing_artifacts/fact_work_feature7.parquet",
-    "shared_preprocessing_artifacts/fact_work_feature7.csv",
-    "feature7_artifacts/feature7_risk_distribution.png",
-    "feature7_artifacts/feature7_kmeans_model.joblib",
-    "feature7_artifacts/feature7_iforest_model.joblib"
-  ]
+  "ml_layer_complete_only": true,
+  "score_percentile_is_diagnostic_only": true
 }

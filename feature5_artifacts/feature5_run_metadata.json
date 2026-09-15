@@ -1,20 +1,19 @@
 {
   "feature": "Feature 5 - Vendor Concentration Risk",
-  "timestamp_utc": "2026-09-09T10:56:45.024112+00:00",
-  "total_vendors_processed": 9167,
-  "active_vendors_processed": 2552,
-  "risk_tier_distribution": {
-    "Low Volume / Unrated": 6615,
-    "Medium": 1900,
-    "High": 331,
-    "Low": 180,
-    "Critical": 141
-  },
+  "created_at_utc": "2026-09-15T20:19:32.972834+00:00",
+  "total_vendors_processed": 9170,
+  "active_vendors_processed": 2550,
+  "bridge_rows": 16176,
+  "multi_vendor_work_count": 852,
+  "total_known_vendor_spend": 4617407597.0,
+  "total_unknown_vendor_spend": 2979152753.0,
+  "vendor_risk_coverage": 0.6078287256679268,
   "artifacts": {
     "vendor_risk_csv": "/content/drive/MyDrive/MPLADs/feature5_artifacts/feature5_vendor_risk.csv",
     "vendor_risk_parquet": "/content/drive/MyDrive/MPLADs/feature5_artifacts/feature5_vendor_risk.parquet",
-    "vendor_worklist_csv": "/content/drive/MyDrive/MPLADs/feature5_artifacts/feature5_vendor_risk_worklist.csv",
-    "plot_distribution": "/content/drive/MyDrive/MPLADs/feature5_artifacts/feature5_vendor_concentration_distribution.png",
-    "iforest_model": "/content/drive/MyDrive/MPLADs/feature5_artifacts/feature5_isolation_forest.joblib"
+    "bridge_csv": "/content/drive/MyDrive/MPLADs/shared_preprocessing_artifacts/fact_work_vendor.csv",
+    "bridge_parquet": "/content/drive/MyDrive/MPLADs/shared_preprocessing_artifacts/fact_work_vendor.parquet",
+    "work_fact_csv": "/content/drive/MyDrive/MPLADs/shared_preprocessing_artifacts/fact_work_feature5.csv",
+    "work_fact_parquet": "/content/drive/MyDrive/MPLADs/shared_preprocessing_artifacts/fact_work_feature5.parquet"
   }
 }
