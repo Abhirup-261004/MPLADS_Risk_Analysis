@@ -160,7 +160,7 @@ class FeatureStore:
                     "state": str(state_name),
                     "mp_count": int(len(group)),
                     "mean_composite_risk_score": float(group["ml_augmented_composite_risk_score"].mean()) if "ml_augmented_composite_risk_score" in group else float(group["composite_risk_score"].mean()),
-                    "mean_allocation_utilization_pct": float(group["allocation_utilization_pct"].mean()),
+                    "mean_allocation_utilization_pct": float(group["allocation_utilization_pct"].mean()) if "allocation_utilization_pct" in group else 0.0,
                     "critical_mp_count": int((group["ml_augmented_risk_tier"] == "Critical").sum()) if "ml_augmented_risk_tier" in group else int((group["composite_risk_tier"] == "Critical").sum()),
                     "high_mp_count": int((group["ml_augmented_risk_tier"] == "High").sum()) if "ml_augmented_risk_tier" in group else int((group["composite_risk_tier"] == "High").sum()),
                     "medium_mp_count": int((group["ml_augmented_risk_tier"] == "Medium").sum()) if "ml_augmented_risk_tier" in group else int((group["composite_risk_tier"] == "Medium").sum()),
@@ -217,7 +217,9 @@ class FeatureStore:
         if f7_k.exists():
             self.f7_kmeans = joblib.load(f7_k)
 
-        f7_i = settings.FEATURE7_ARTIFACT_DIR / "feature7_iforest_model.joblib"
+        f7_i = settings.FEATURE7_ARTIFACT_DIR / "feature7_isolation_forest.joblib"
+        if not f7_i.exists():
+            f7_i = settings.FEATURE7_ARTIFACT_DIR / "feature7_iforest_model.joblib"
         if f7_i.exists():
             self.f7_iforest = joblib.load(f7_i)
 
