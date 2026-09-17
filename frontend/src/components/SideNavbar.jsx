@@ -38,7 +38,8 @@ export default function SideNavbar({ user, page, onNavigate, onSignOut }) {
   }, [isOpen]);
 
   const initials = (user?.name || 'User').trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
-  const navigationItems = user?.profileType === 'agency' || user?.role === 'agency' ? agencyItems : items;
+  const isSystemAdmin = user?.profileType === 'system_admin' || user?.role === 'system_admin' || user?.role === 'admin';
+  const navigationItems = user?.profileType === 'agency' || user?.role === 'agency' ? agencyItems : isSystemAdmin ? [...items, ['governance', 'Governance', '⚙']] : items;
 
   return (
     <>

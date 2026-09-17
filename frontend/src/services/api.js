@@ -70,6 +70,11 @@ export const getAgencyRiskProfile = (agencyKey) => getProtected(`/risk/agencies/
 export const getMapIntelligence = (state = '') => getProtected(`/risk/map-intelligence${state ? `?state=${encodeURIComponent(state)}` : ''}`);
 export const getWork = (workId) => getProtected(`/works/${encodeURIComponent(workId)}`);
 export const getCurrentUser = () => getProtected('/auth/me');
+export const getGovernance = () => getProtected('/governance');
+export const submitUserGovernanceChange = (payload) => sendProtected('/governance/users/change', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+export const approveGovernanceChange = (id) => sendProtected(`/governance/changes/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+export const saveGovernanceConfig = (payload) => sendProtected('/governance/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+export const createGovernanceKey = (payload) => sendProtected('/governance/api-keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 export const getAgencyWorkspace = () => getProtected('/agency/workspace');
 export const createAgencySubmission = (payload) => sendProtected('/agency/submissions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 export const reviseAgencySubmission = (id, payload) => sendProtected(`/agency/submissions/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });

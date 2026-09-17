@@ -15,6 +15,7 @@ import ReviewQueue from './components/ReviewQueue.jsx';
 import Logo from './components/Logo.jsx';
 import PublicViewer from './components/PublicViewer.jsx';
 import AgencyWorkspace from './components/AgencyWorkspace.jsx';
+import GovernanceConsole from './components/GovernanceConsole.jsx';
 import { getCurrentUser, getDashboardOverview, getWorks, login, register } from './services/api.js';
 
 function MailIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1" /><path d="m4.5 7 7.5 5.5L19.5 7" /></svg>; }
@@ -53,7 +54,7 @@ function routeFromHash() {
   const [path, ...rest] = hash.split('/');
   if (path === 'agency-risk' && rest.length) return { page: 'agency', agencyKey: rest.join('/') };
   if (path === 'agency-risk') return { page: 'agency', agencyKey: null };
-  const validPages = new Set(['home', 'review-queue', 'risk', 'works', 'agency', 'ai', 'notifications', 'reports', 'map', 'analytics', 'data-refresh', 'settings']);
+  const validPages = new Set(['home', 'review-queue', 'risk', 'works', 'agency', 'ai', 'notifications', 'reports', 'map', 'analytics', 'data-refresh', 'settings', 'governance']);
   return { page: validPages.has(path) ? path : 'home', agencyKey: null };
 }
 
@@ -216,6 +217,7 @@ export default function App() {
     else if (isAgencyUser && page === 'home') content = <AgencyWorkspace />;
     else if (page === 'investigation' && selectedWorkId) content = <WorkInvestigation workId={selectedWorkId} user={user} onSignOut={signOut} onNavigate={navigate} />;
     else if (page === 'review-queue') content = <ReviewQueue user={user} onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} onNavigate={navigate} />;
+    else if (page === 'governance' && (user.role === 'system_admin' || user.role === 'admin')) content = <GovernanceConsole />;
     else if (page === 'risk') content = <RiskCenter />;
     else if (page === 'ai') content = <AiAnalyst onOpenWork={(workId) => { setSelectedWorkId(workId); setPage('investigation'); }} />;
     else if (page === 'reports') content = <ReportsExport />;

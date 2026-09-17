@@ -1,0 +1,8 @@
+import mongoose from 'mongoose';
+
+export const GovernanceConfig = mongoose.model('GovernanceConfig', new mongoose.Schema({ key: { type: String, unique: true }, value: mongoose.Schema.Types.Mixed, updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, reason: String }, { timestamps: true }));
+const governanceAuditSchema = new mongoose.Schema({ actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, actorName: String, action: String, target: String, reason: { type: String, required: true }, payload: mongoose.Schema.Types.Mixed, timestamp: { type: Date, default: Date.now } }, { versionKey: false });
+governanceAuditSchema.pre(['updateOne', 'updateMany', 'findOneAndUpdate', 'findByIdAndUpdate', 'deleteOne', 'deleteMany'], function () { throw new Error('GovernanceAudit is append-only and immutable.'); });
+export const GovernanceAudit = mongoose.model('GovernanceAudit', governanceAuditSchema);
+export const GovernanceChange = mongoose.model('GovernanceChange', new mongoose.Schema({ action: String, target: String, payload: mongoose.Schema.Types.Mixed, reason: String, requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' } }, { timestamps: true }));
+export const IntegrationKey = mongoose.model('IntegrationKey', new mongoose.Schema({ name: { type: String, unique: true }, keyHash: String, permissions: [String], active: { type: Boolean, default: true }, createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' } }, { timestamps: true }));

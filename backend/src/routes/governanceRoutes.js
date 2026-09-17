@@ -1,0 +1,11 @@
+import { Router } from 'express';
+import { approveChange, createIntegrationKey, getGovernance, requestUserChange, saveConfig } from '../controllers/governanceController.js';
+import { authenticate } from '../middleware/authenticate.js';
+import { authorizeRoles } from '../middleware/authorize.js';
+export const governanceRouter = Router();
+governanceRouter.use(authenticate, authorizeRoles('system_admin', 'admin'));
+governanceRouter.get('/', getGovernance);
+governanceRouter.post('/users/change', requestUserChange);
+governanceRouter.post('/changes/:id/approve', approveChange);
+governanceRouter.put('/config', saveConfig);
+governanceRouter.post('/api-keys', createIntegrationKey);
