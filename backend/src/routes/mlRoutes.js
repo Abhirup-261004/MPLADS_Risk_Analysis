@@ -9,18 +9,20 @@ import {
   getMpRisk,
   getStateRisk,
   getDashboardSummary,
+  getAnalyticsHealth,
 } from '../controllers/mlController.js';
 
-export const mlRouter = Router();
+export const analyticsRouter = Router();
 
-// Require JWT authentication on all ML proxy routes
-mlRouter.use(authenticate);
-mlRouter.use(authorizeRoles(...INTERNAL_ROLES));
+// The browser reaches FastAPI only through this authenticated Express proxy.
+analyticsRouter.use(authenticate);
+analyticsRouter.use(authorizeRoles(...INTERNAL_ROLES));
 
-mlRouter.post('/categorize-work', categorizeWork);
-mlRouter.post('/disbursement-risk', getDisbursementRisk);
-mlRouter.post('/cost-anomaly', getCostAnomaly);
-mlRouter.get('/vendor-risk/:vendorId', getVendorRisk);
-mlRouter.get('/mp-risk/:mpIdentifier', getMpRisk);
-mlRouter.get('/state-risk/:state', getStateRisk);
-mlRouter.get('/dashboard-summary', getDashboardSummary);
+analyticsRouter.get('/health', getAnalyticsHealth);
+analyticsRouter.post('/categorize-work', categorizeWork);
+analyticsRouter.post('/disbursement-risk', getDisbursementRisk);
+analyticsRouter.post('/cost-anomaly', getCostAnomaly);
+analyticsRouter.get('/vendor-risk/:vendorId', getVendorRisk);
+analyticsRouter.get('/mp-risk/:mpIdentifier', getMpRisk);
+analyticsRouter.get('/state-risk/:state', getStateRisk);
+analyticsRouter.get('/dashboard-summary', getDashboardSummary);

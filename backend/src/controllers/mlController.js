@@ -1,7 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import { env } from '../config/env.js';
 
-const getBaseUrl = () => (env.mlApiUrl || 'http://localhost:8000').replace(/\/+$/, '');
+const getFastApiBaseUrl = () => (env.fastApiUrl || 'http://localhost:8000').replace(/\/+$/, '');
 
 async function forwardToFastApi(targetUrl, options, res) {
   let response;
@@ -50,7 +50,7 @@ async function forwardToFastApi(targetUrl, options, res) {
 }
 
 export const categorizeWork = asyncHandler(async (req, res) => {
-  const targetUrl = `${getBaseUrl()}/nlp/categorize-work`;
+  const targetUrl = `${getFastApiBaseUrl()}/nlp/categorize-work`;
   await forwardToFastApi(
     targetUrl,
     {
@@ -63,7 +63,7 @@ export const categorizeWork = asyncHandler(async (req, res) => {
 });
 
 export const getDisbursementRisk = asyncHandler(async (req, res) => {
-  const targetUrl = `${getBaseUrl()}/score/disbursement-risk`;
+  const targetUrl = `${getFastApiBaseUrl()}/score/disbursement-risk`;
   await forwardToFastApi(
     targetUrl,
     {
@@ -76,7 +76,7 @@ export const getDisbursementRisk = asyncHandler(async (req, res) => {
 });
 
 export const getCostAnomaly = asyncHandler(async (req, res) => {
-  const targetUrl = `${getBaseUrl()}/score/cost-anomaly`;
+  const targetUrl = `${getFastApiBaseUrl()}/score/cost-anomaly`;
   await forwardToFastApi(
     targetUrl,
     {
@@ -90,7 +90,7 @@ export const getCostAnomaly = asyncHandler(async (req, res) => {
 
 export const getVendorRisk = asyncHandler(async (req, res) => {
   const query = new URLSearchParams(req.query).toString();
-  const targetUrl = `${getBaseUrl()}/score/vendor-risk/${encodeURIComponent(req.params.vendorId)}${
+  const targetUrl = `${getFastApiBaseUrl()}/score/vendor-risk/${encodeURIComponent(req.params.vendorId)}${
     query ? `?${query}` : ''
   }`;
   await forwardToFastApi(targetUrl, { method: 'GET' }, res);
@@ -98,7 +98,7 @@ export const getVendorRisk = asyncHandler(async (req, res) => {
 
 export const getMpRisk = asyncHandler(async (req, res) => {
   const query = new URLSearchParams(req.query).toString();
-  const targetUrl = `${getBaseUrl()}/score/mp-risk/${encodeURIComponent(req.params.mpIdentifier)}${
+  const targetUrl = `${getFastApiBaseUrl()}/score/mp-risk/${encodeURIComponent(req.params.mpIdentifier)}${
     query ? `?${query}` : ''
   }`;
   await forwardToFastApi(targetUrl, { method: 'GET' }, res);
@@ -106,7 +106,7 @@ export const getMpRisk = asyncHandler(async (req, res) => {
 
 export const getStateRisk = asyncHandler(async (req, res) => {
   const query = new URLSearchParams(req.query).toString();
-  const targetUrl = `${getBaseUrl()}/score/state-risk/${encodeURIComponent(req.params.state)}${
+  const targetUrl = `${getFastApiBaseUrl()}/score/state-risk/${encodeURIComponent(req.params.state)}${
     query ? `?${query}` : ''
   }`;
   await forwardToFastApi(targetUrl, { method: 'GET' }, res);
@@ -114,7 +114,11 @@ export const getStateRisk = asyncHandler(async (req, res) => {
 
 export const getDashboardSummary = asyncHandler(async (req, res) => {
   const query = new URLSearchParams(req.query).toString();
-  const targetUrl = `${getBaseUrl()}/dashboard/summary${query ? `?${query}` : ''}`;
+  const targetUrl = `${getFastApiBaseUrl()}/dashboard/summary${query ? `?${query}` : ''}`;
   await forwardToFastApi(targetUrl, { method: 'GET' }, res);
 });
 
+export const getAnalyticsHealth = asyncHandler(async (req, res) => {
+  const targetUrl = `${getFastApiBaseUrl()}/health`;
+  await forwardToFastApi(targetUrl, { method: 'GET' }, res);
+});

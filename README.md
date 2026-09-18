@@ -8,18 +8,18 @@ This repository contains the machine learning models, anomaly detection algorith
 
 ```text
 React/Vite Frontend (Port 5173)
-        ↓  (Authenticated HTTP / JSON via /api/ml/...)
+        ↓  (Authenticated HTTP / JSON via /api/analytics/...)
 Express Backend (Port 5001)
         ↓  (Server-to-Server Native fetch)
 FastAPI ML Service (Port 8000)
 ```
 
 - **Client Isolation**: The browser **MUST NOT** and **DOES NOT** call FastAPI directly. The browser exclusively communicates with the Express backend (`http://localhost:5001/api`).
-- **Secure ML Proxy**: Express exposes authenticated routes under `/api/ml/*` protected by existing JWT authentication middleware.
+- **Secure Analytics Proxy**: Express exposes authenticated routes under `/api/analytics/*` protected by existing JWT authentication middleware.
 - **How React Reaches ML**:
   1. React components call service functions in `frontend/src/services/api.js`.
-  2. `api.js` sends requests with `Authorization: Bearer <token>` to Express (`/api/ml/...`).
-  3. Express authenticates the JWT and proxies the request to FastAPI (`${ML_API_URL}/...`), forwarding request bodies, headers, query parameters (`house`, `state`), and preserving FastAPI status codes and `{ detail: "..." }` errors.
+  2. `api.js` sends requests with `Authorization: Bearer <token>` to Express (`/api/analytics/...`).
+  3. Express authenticates the JWT and proxies the request to FastAPI (`${FASTAPI_URL}/...`), forwarding request bodies, headers, query parameters (`house`, `state`), and preserving FastAPI status codes and `{ detail: "..." }` errors.
   4. FastAPI executes inference using loaded scikit-learn and LightGBM models against the Parquet feature store.
   5. The response flows back through Express to the React UI.
 
@@ -54,9 +54,9 @@ MONGODB_URI=mongodb://127.0.0.1:27017/prahari-ai
 JWT_SECRET=replace_with_a_long_random_secret_at_least_32_characters
 JWT_EXPIRES_IN=7d
 CLIENT_URL=http://localhost:5173
-ML_API_URL=http://localhost:8000
+FASTAPI_URL=http://localhost:8000
 ```
-> **Security Note**: `ML_API_URL` is private and must only be read by the Express server. Never expose it to Vite or the browser.
+> **Security Note**: `FASTAPI_URL` is private and must only be read by the Express server. Never expose it to Vite or the browser.
 
 ### Interactive FastAPI REST API (Recommended)
 ### 2. React Frontend (`frontend/.env`)
@@ -104,7 +104,7 @@ Access the web portal at: [http://localhost:5173](http://localhost:5173)
 
 - **Categorize Work Description (NLP - TF-IDF + LightGBM)**:
   ```bash
-  curl -X POST "http://localhost:8000/categorize" \
+  curl -X POST "http://localhost:8000/nlp/categorize-work" \
        -H "Content-Type: application/json" \
        -d '{"description": "Installation of 500W Solar Street Lights in Gram Panchayat"}'
   ```
@@ -138,9 +138,9 @@ Access the web portal at: [http://localhost:5173](http://localhost:5173)
 
 - **Get Vendor Risk Profile (Vendor Risk Model)**:
   ```bash
-  curl -X POST "http://localhost:8000/score/vendor-risk/VEND_00123"
+  curl "http://localhost:8000/score/vendor-risk/VEND_00123"
   ```
-### 2. From Terminal via Express ML Proxy (`/api/ml`)
+### 2. From Terminal via Express Analytics Proxy (`/api/analytics`)
 Authenticate first to obtain a JWT token, then query the proxy:
 
 ```powershell
@@ -153,14 +153,14 @@ $authResponse = Invoke-RestMethod -Uri "http://localhost:5001/api/auth/login" `
 $token = $authResponse.token
 
 # Test Work Categorization through Express Proxy
-Invoke-RestMethod -Uri "http://localhost:5001/api/ml/categorize-work" `
+Invoke-RestMethod -Uri "http://localhost:5001/api/analytics/categorize-work" `
   -Method Post `
   -Headers @{ Authorization = "Bearer $token" } `
   -ContentType "application/json" `
   -Body '{"description":"Installation of 500W Solar Street Lights in Gram Panchayat","declared_category":"Normal/Others"}'
 
 # Test MP Composite Risk (preserves query params like house and state)
-Invoke-RestMethod -Uri "http://localhost:5001/api/ml/mp-risk/Sanjay%20Seth?house=LS" `
+Invoke-RestMethod -Uri "http://localhost:5001/api/analytics/mp-risk/Sanjay%20Seth?house=LS" `
   -Method Get `
   -Headers @{ Authorization = "Bearer $token" }
 ```
@@ -169,17 +169,18 @@ Invoke-RestMethod -Uri "http://localhost:5001/api/ml/mp-risk/Sanjay%20Seth?house
 
 ## 🛠️ API Endpoints Overview
 
-The Express backend forwards authenticated `/api/ml/*` requests to the corresponding FastAPI endpoints:
+The Express backend forwards authenticated `/api/analytics/*` requests to the corresponding FastAPI endpoints:
 
 | Module | Express Proxy Route | Target FastAPI Endpoint | Method | Description |
 |---|---|---|---|---|
-| **NLP Categorization** | `/api/ml/categorize-work` | `/nlp/categorize-work` | `POST` | Predict work category & detect category-description mismatch |
-| **Disbursement Risk** | `/api/ml/disbursement-risk` | `/score/disbursement-risk` | `POST` | Calculate disbursement shortfall & Isolation Forest risk score |
-| **Cost Anomaly** | `/api/ml/cost-anomaly` | `/score/cost-anomaly` | `POST` | LOF cost anomaly detection & peer median cost deviation |
-| **Vendor Risk** | `/api/ml/vendor-risk/:vendorId` | `/score/vendor-risk/{vendor_id}` | `GET` | Vendor concentration, high-risk ratio, and composite risk tier |
-| **MP Risk** | `/api/ml/mp-risk/:mpIdentifier` | `/score/mp-risk/{mp_identifier}` | `GET` | Multi-dimensional composite MP risk scorecard (preserves `house`, `state`) |
-| **State Risk** | `/api/ml/state-risk/:state` | `/score/state-risk/{state}` | `GET` | State-wide composite risk rollup & utilization metrics |
-| **Dashboard Summary** | `/api/ml/dashboard-summary` | `/dashboard/summary` | `GET` | Top 20 ranked risk scorecards (MP or State level) |
+| **Service Health** | `/api/analytics/health` | `/health` | `GET` | FastAPI model and index availability |
+| **NLP Categorization** | `/api/analytics/categorize-work` | `/nlp/categorize-work` | `POST` | Predict work category and detect category-description mismatch |
+| **Disbursement Risk** | `/api/analytics/disbursement-risk` | `/score/disbursement-risk` | `POST` | Calculate disbursement shortfall and Isolation Forest risk score |
+| **Cost Anomaly** | `/api/analytics/cost-anomaly` | `/score/cost-anomaly` | `POST` | LOF cost anomaly detection and peer median cost deviation |
+| **Vendor Risk** | `/api/analytics/vendor-risk/:vendorId` | `/score/vendor-risk/{vendor_id}` | `GET` | Vendor concentration, high-risk ratio, and composite risk tier |
+| **MP Risk** | `/api/analytics/mp-risk/:mpIdentifier` | `/score/mp-risk/{mp_identifier}` | `GET` | Multi-dimensional composite MP risk scorecard (preserves `house`, `state`) |
+| **State Risk** | `/api/analytics/state-risk/:state` | `/score/state-risk/{state}` | `GET` | State-wide composite risk rollup and utilization metrics |
+| **Dashboard Summary** | `/api/analytics/dashboard-summary` | `/dashboard/summary` | `GET` | Top 20 ranked risk scorecards (MP or State level) |
 
 ---
 

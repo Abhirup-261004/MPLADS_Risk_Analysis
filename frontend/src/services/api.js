@@ -113,45 +113,47 @@ export const generateReport = (configuration) => sendProtected('/reports/generat
 export const markWorkUnderReview = (workId) => sendProtected(`/works/${encodeURIComponent(workId)}/review`, { method: 'PATCH' });
 
 export const categorizeWork = (payload) =>
-  sendProtected('/ml/categorize-work', {
+  sendProtected('/analytics/categorize-work', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
 export const getDisbursementRisk = (payload) =>
-  sendProtected('/ml/disbursement-risk', {
+  sendProtected('/analytics/disbursement-risk', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
 export const getCostAnomaly = (payload) =>
-  sendProtected('/ml/cost-anomaly', {
+  sendProtected('/analytics/cost-anomaly', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
 export const getVendorRisk = (vendorId) =>
-  getProtected(`/ml/vendor-risk/${encodeURIComponent(vendorId)}`);
+  getProtected(`/analytics/vendor-risk/${encodeURIComponent(vendorId)}`);
 
 export const getMpRisk = (mpIdentifier, params = {}) => {
   const query = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''))
   ).toString();
-  return getProtected(`/ml/mp-risk/${encodeURIComponent(mpIdentifier)}${query ? `?${query}` : ''}`);
+  return getProtected(`/analytics/mp-risk/${encodeURIComponent(mpIdentifier)}${query ? `?${query}` : ''}`);
 };
 
 export const getStateRisk = (state) =>
-  getProtected(`/ml/state-risk/${encodeURIComponent(state)}`);
+  getProtected(`/analytics/state-risk/${encodeURIComponent(state)}`);
 
 export const getMlDashboardSummary = (params = {}) => {
   const query = new URLSearchParams(
     Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''))
   ).toString();
-  return getProtected(`/ml/dashboard-summary${query ? `?${query}` : ''}`);
+  return getProtected(`/analytics/dashboard-summary${query ? `?${query}` : ''}`);
 };
+
+export const getAnalyticsHealth = () => getProtected('/analytics/health');
 
 // Fraud Response & Risk Action Workflow APIs
 export const getReviewQueue = (params = {}) => {
