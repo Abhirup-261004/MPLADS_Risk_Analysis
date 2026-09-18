@@ -12,7 +12,7 @@ def categorize_work(req: CategorizeRequest):
         raise HTTPException(status_code=400, detail="Description text cannot be empty.")
 
     clf_pipeline = store.nlp_classifier
-    predicted_label = "Community Infrastructure"
+    predicted_label = "Other Public Infrastructure"
     confidence = 0.85
     alternatives = []
 
@@ -50,19 +50,36 @@ def categorize_work(req: CategorizeRequest):
     )
 
 def _rule_engine_fallback(description: str):
-    desc_lower = description.lower()
-    if any(w in desc_lower for w in ["water", "pipe", "borewell", "ro plant", "tank", "drinking"]):
-        label = "Drinking Water Infrastructure"
-    elif any(w in desc_lower for w in ["road", "drain", "cc road", "pathway", "bridge", "culvert"]):
-        label = "Roads, Bridges & Pathways"
-    elif any(w in desc_lower for w in ["school", "college", "library", "class", "classroom", "education"]):
-        label = "Education & Skill Development"
-    elif any(w in desc_lower for w in ["hospital", "health", "sanitation", "ambulance", "toilet", "phc"]):
-        label = "Public Health & Sanitation"
-    elif any(w in desc_lower for w in ["light", "solar", "electrification", "power", "energy"]):
-        label = "Energy & Electrification"
-    elif any(w in desc_lower for w in ["community", "hall", "crematorium", "shed", "boundary"]):
-        label = "Community Infrastructure"
-    else:
-        label = "Infrastructure Development"
-    return label, 0.80, []
+    store = FeatureStore.get_instance()
+    labels = None
+    if store.nlp_taxonomy and isinstance(store.nlp_taxonomy.get("taxonomy"), dict):
+        labels = list(store.nlp_taxonomy["taxonomy"].keys())
+    if not labels:
+        labels = [
+            "Road & Pathway Infrastructure", "Street Lighting & Solar Energy",
+            "Drinking Water Infrastructure", "Sanitation & Drainage",
+            "School & Education Infrastructure", "Healthcare & Ambulance Services",
+            "Community & Public Buildings", "Agriculture & Irrigation",
+            "Sports & Recreation", "Religious & Cultural Infrastructure",
+            "Other Public Infrastructure",
+        ]
+    keyword_map = {
+        "Drinking Water Infrastructure": ["water", "pipe", "borewell", "hand pump", "drinking", "tank"],
+        "Road & Pathway Infrastructure": ["road", "pathway", "paver", "culvert", "bridge", "cc road"],
+        "Street Lighting & Solar Energy": ["light", "solar", "led", "high mast", "street lamp"],
+        "Sanitation & Drainage": ["drain", "sewer", "toilet", "sanitation", "waste"],
+        "School & Education Infrastructure": ["school", "classroom", "college", "library", "laboratory"],
+        "Healthcare & Ambulance Services": ["hospital", "health", "medical", "ambulance", "clinic"],
+        "Community & Public Buildings": ["community hall", "community center", "building", "shelter", "anganwadi"],
+        "Agriculture & Irrigation": ["irrigation", "agriculture", "farm", "canal", "check dam"],
+        "Sports & Recreation": ["sport", "playground", "stadium", "gym", "recreation"],
+        "Religious & Cultural Infrastructure": ["temple", "mandir", "mosque", "church", "cultural"],
+    }
+    low = description.lower()
+    best, score = "Other Public Infrastructure", 0
+    for label, kws in keyword_map.items():
+        hits = sum(1 for kw in kws if kw in low)
+        if hits > score:
+            best, score = label, hits
+    confidence = min(0.50 + 0.05 * score, 0.80)
+    return best, confidence, []

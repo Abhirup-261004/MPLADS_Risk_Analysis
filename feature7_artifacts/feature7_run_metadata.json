@@ -1,6 +1,6 @@
 {
   "feature": "Feature 7 - Multi-Layer Risk Aggregation & MP Composite Scorecard",
-  "created_at_utc": "2026-09-15T20:21:24.268689",
+  "created_at_utc": "2026-09-18T22:04:46.776264",
   "threshold_version": "v2.0_calibrated",
   "threshold_source": "validation_partition_audit_capacity",
   "audit_capacity": {
@@ -10,35 +10,17 @@
   "critical_threshold": 0.7,
   "high_threshold": 0.5,
   "medium_threshold": 0.3,
-  "validation_precision_by_tier": {
-    "Critical": 0.84,
-    "High": 0.68,
-    "Medium": 0.52,
-    "Low": 0.95
-  },
-  "validation_confidence_intervals": {
-    "Critical": [
-      0.78,
-      0.9
-    ],
-    "High": [
-      0.61,
-      0.75
-    ]
-  },
-  "tier_migration_rate": 0.04,
-  "top_k_overlap_vs_previous_run": 0.94,
   "mp_tier_counts": {
-    "Unknown / Insufficient Data": 230,
-    "Low": 219,
-    "Medium": 175,
-    "High": 102,
-    "Critical": 48
+    "Low": 387,
+    "Unknown / Insufficient Data": 197,
+    "Medium": 132,
+    "High": 35,
+    "Critical": 23
   },
   "composite_data_quality_breakdown": {
-    "Partial": 315,
-    "Insufficient": 230,
-    "Complete": 229
+    "Partial": 326,
+    "Complete": 251,
+    "Insufficient": 197
   },
   "ml_layer_complete_only": true,
   "score_percentile_is_diagnostic_only": true

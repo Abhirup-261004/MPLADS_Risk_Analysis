@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
-from mplads_api.core.feature_store import FeatureStore, sanitize_record
+from mplads_api.core.feature_store import FeatureStore
 from mplads_api.schemas.dashboard import HealthResponse
 
 router = APIRouter(tags=["Dashboard & Operations"])
@@ -21,12 +21,13 @@ def get_dashboard_summary(level: str = Query("mp", enum=["mp", "state"]), id: Op
     store = FeatureStore.get_instance()
 
     if level == "state":
+        from mplads_api.core.feature_store import sanitize_record
         if id:
             st_upper = id.upper().strip()
             if st_upper in store.state_index:
-                return store.state_index[st_upper]
+                return sanitize_record(store.state_index[st_upper])
             raise HTTPException(status_code=404, detail=f"State '{id}' not found in summary index.")
-        return list(store.state_index.values())
+        return [sanitize_record(v) for v in store.state_index.values()]
 
     else:  # MP level
         if id:
@@ -37,5 +38,6 @@ def get_dashboard_summary(level: str = Query("mp", enum=["mp", "state"]), id: Op
         if store.mp_scorecard is not None and not store.mp_scorecard.empty:
             sort_col = "ml_augmented_composite_risk_score" if "ml_augmented_composite_risk_score" in store.mp_scorecard.columns else "composite_risk_score"
             sorted_mps = store.mp_scorecard.sort_values(by=sort_col, ascending=False).head(20)
-            return [sanitize_record(row) for row in sorted_mps.to_dict(orient="records")]
+            from mplads_api.core.feature_store import sanitize_record
+            return [sanitize_record(row.to_dict()) for _, row in sorted_mps.iterrows()]
         return list(store.mp_index.values())[:20]

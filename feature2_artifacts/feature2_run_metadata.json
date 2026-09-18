@@ -1,20 +1,14 @@
 {
   "feature": "Feature 2 - Cost Benchmarking & Sanction-Amount Anomaly Detection",
-  "run_timestamp": "2026-09-15T20:14:25.083839",
+  "run_timestamp": "2026-09-18T14:33:40.360276",
   "split_method": "chronological_date_split",
   "date_column": "obs_date",
   "train_date_min": "2023-08-02",
-  "train_date_max": "2025-11-23",
-  "validation_date_min": "2025-11-24",
-  "validation_date_max": "2026-04-09",
-  "holdout_date_min": "2026-04-10",
+  "train_date_max": "2025-11-12",
+  "validation_date_min": "2025-11-13",
+  "validation_date_max": "2026-03-28",
+  "holdout_date_min": "2026-03-29",
   "holdout_date_max": "2026-09-07",
-  "candidate_scores": {
-    "Candidate_A": 0.88,
-    "Candidate_B": 0.91,
-    "Candidate_C": 0.94
-  },
-  "selected_candidate": "Candidate_C",
   "selected_weights": {
     "z_score": 0.4,
     "lof_anomaly": 0.35,
@@ -23,19 +17,14 @@
   "vague_boost_value": 0.1,
   "normalization_method": "percentile_q1_q99",
   "normalization_quantiles": {
-    "q1": 0.9552401825983677,
-    "q99": 487664241.5433515
+    "q1": 0.9634591936327424,
+    "q99": 1.5244596235917687
   },
-  "holdout_top_k_overlap": 0.95,
-  "bootstrap_rank_stability": 0.97,
-  "review_sample_size": 200,
-  "review_precision": 0.86,
-  "validation_status": "validated",
   "risk_tier_counts": {
-    "Unknown / Invalid": 28805,
-    "Low": 12244,
-    "Medium": 1372,
-    "High": 654,
-    "Critical": 75
+    "Low": 28657,
+    "Unknown / Invalid": 9150,
+    "Medium": 2751,
+    "High": 1760,
+    "Critical": 832
   }
 }

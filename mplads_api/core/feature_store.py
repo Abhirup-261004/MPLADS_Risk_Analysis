@@ -80,8 +80,8 @@ class FeatureStore:
         if f1_path.exists():
             logger.info("Loading Feature 1 work table from %s", f1_path)
             f1_df = pd.read_parquet(f1_path) if str(f1_path).endswith(".parquet") else pd.read_csv(f1_path, low_memory=False)
-            for row_dict in f1_df.to_dict(orient="records"):
-                clean_dict = sanitize_record(row_dict)
+            for _, row in f1_df.iterrows():
+                clean_dict = sanitize_record(row.to_dict())
                 w_id = str(clean_dict.get("work_id", ""))
                 w_key = str(clean_dict.get("work_key", ""))
                 if w_id and w_id != "None":
@@ -94,8 +94,8 @@ class FeatureStore:
         if f2_path.exists():
             logger.info("Merging Feature 2 work table from %s", f2_path)
             f2_df = pd.read_parquet(f2_path) if str(f2_path).endswith(".parquet") else pd.read_csv(f2_path, low_memory=False)
-            for row_dict in f2_df.to_dict(orient="records"):
-                clean_dict = sanitize_record(row_dict)
+            for _, row in f2_df.iterrows():
+                clean_dict = sanitize_record(row.to_dict())
                 w_id = str(clean_dict.get("work_id", ""))
                 w_key = str(clean_dict.get("work_key", ""))
                 target_keys = [k for k in [w_id, w_key] if k and k != "None"]
@@ -107,14 +107,6 @@ class FeatureStore:
 
         logger.info("Indexed %d combined work records.", len(self.work_index))
 
-        # Build MP Expenditure Aggregation Map from Work Index
-        mp_expenditure_map: Dict[str, float] = {}
-        for w_record in self.work_index.values():
-            mp_k = w_record.get("mp_key")
-            disbursed = float(w_record.get("effective_disbursed") or w_record.get("total_fund_disbursed") or 0.0)
-            if mp_k and mp_k != "None":
-                mp_expenditure_map[mp_k] = mp_expenditure_map.get(mp_k, 0.0) + disbursed
-
         # 3. Load Feature 7 MP Master Scorecard
         mp_path = settings.FEATURE7_ARTIFACT_DIR / "feature7_mp_composite_risk.parquet"
         if not mp_path.exists():
@@ -123,14 +115,8 @@ class FeatureStore:
         if mp_path.exists():
             logger.info("Loading MP composite scorecard from %s", mp_path)
             self.mp_scorecard = pd.read_parquet(mp_path) if str(mp_path).endswith(".parquet") else pd.read_csv(mp_path, low_memory=False)
-            
-            # Map aggregated expenditure amounts into mp_scorecard
-            self.mp_scorecard["total_expenditure_amount"] = self.mp_scorecard["mp_key"].map(mp_expenditure_map).fillna(0.0)
-            self.mp_scorecard["expenditure_amount"] = self.mp_scorecard["total_expenditure_amount"]
-            self.mp_scorecard["expenditure"] = self.mp_scorecard["total_expenditure_amount"]
-
-            for row_dict in self.mp_scorecard.to_dict(orient="records"):
-                clean_dict = sanitize_record(row_dict)
+            for _, row in self.mp_scorecard.iterrows():
+                clean_dict = sanitize_record(row.to_dict())
                 mp_k = str(clean_dict.get("mp_key", ""))
                 mp_name = str(clean_dict.get("mp_name_clean", ""))
 
@@ -156,16 +142,17 @@ class FeatureStore:
             state_groups = self.mp_scorecard.groupby("state")
             for state_name, group in state_groups:
                 st_str = str(state_name).upper().strip()
-                self.state_index[st_str] = {
+                record_dict = {
                     "state": str(state_name),
                     "mp_count": int(len(group)),
                     "mean_composite_risk_score": float(group["ml_augmented_composite_risk_score"].mean()) if "ml_augmented_composite_risk_score" in group else float(group["composite_risk_score"].mean()),
-                    "mean_allocation_utilization_pct": float(group["allocation_utilization_pct"].mean()) if "allocation_utilization_pct" in group else 0.0,
+                    "mean_allocation_utilization_pct": float(group["allocation_utilization_pct"].mean()) if "allocation_utilization_pct" in group.columns else 0.0,
                     "critical_mp_count": int((group["ml_augmented_risk_tier"] == "Critical").sum()) if "ml_augmented_risk_tier" in group else int((group["composite_risk_tier"] == "Critical").sum()),
                     "high_mp_count": int((group["ml_augmented_risk_tier"] == "High").sum()) if "ml_augmented_risk_tier" in group else int((group["composite_risk_tier"] == "High").sum()),
                     "medium_mp_count": int((group["ml_augmented_risk_tier"] == "Medium").sum()) if "ml_augmented_risk_tier" in group else int((group["composite_risk_tier"] == "Medium").sum()),
                     "low_mp_count": int((group["ml_augmented_risk_tier"] == "Low").sum()) if "ml_augmented_risk_tier" in group else int((group["composite_risk_tier"] == "Low").sum()),
                 }
+                self.state_index[st_str] = sanitize_record(record_dict)
 
         # 4. Load Feature 5 Vendor Master Table
         vendor_path = settings.FEATURE5_ARTIFACT_DIR / "feature5_vendor_risk.parquet"
@@ -175,8 +162,8 @@ class FeatureStore:
         if vendor_path.exists():
             logger.info("Loading vendor risk table from %s", vendor_path)
             self.vendor_risk = pd.read_parquet(vendor_path) if str(vendor_path).endswith(".parquet") else pd.read_csv(vendor_path, low_memory=False)
-            for row_dict in self.vendor_risk.to_dict(orient="records"):
-                clean_dict = sanitize_record(row_dict)
+            for _, row in self.vendor_risk.iterrows():
+                clean_dict = sanitize_record(row.to_dict())
                 v_id = str(clean_dict.get("vendor_id", ""))
                 if v_id and v_id != "None":
                     self.vendor_index[v_id] = clean_dict
@@ -218,8 +205,6 @@ class FeatureStore:
             self.f7_kmeans = joblib.load(f7_k)
 
         f7_i = settings.FEATURE7_ARTIFACT_DIR / "feature7_isolation_forest.joblib"
-        if not f7_i.exists():
-            f7_i = settings.FEATURE7_ARTIFACT_DIR / "feature7_iforest_model.joblib"
         if f7_i.exists():
             self.f7_iforest = joblib.load(f7_i)
 

@@ -14,7 +14,8 @@ def get_disbursement_risk(req: DisbursementRiskRequest):
 
     sanction_amt = float(work_record.get("sanction_amount") or 0.0)
     disbursed = float(work_record.get("effective_disbursed") or work_record.get("total_fund_disbursed") or 0.0)
-    shortfall = float(work_record.get("shortfall_pct") or 0.0)
+    shortfall_val = work_record.get("shortfall_deficit_pct")
+    shortfall = float(shortfall_val) if shortfall_val is not None else 0.0
     zscore = float(work_record.get("peer_shortfall_zscore") or 0.0)
     risk_score = float(work_record.get("disbursement_risk_score") or 0.0)
     risk_tier = str(work_record.get("disbursement_risk_tier") or "Low")
@@ -25,7 +26,7 @@ def get_disbursement_risk(req: DisbursementRiskRequest):
         work_id=str(work_record.get("work_id", req.work_id)),
         sanction_amount=sanction_amt,
         tranche_sum_disbursed=disbursed,
-        shortfall_pct=shortfall,
+        shortfall_deficit_pct=shortfall,
         peer_group=PeerGroupContext(
             state=str(work_record.get("state") or "Unknown"),
             category=str(work_record.get("category_nlp") or "Normal/Others")

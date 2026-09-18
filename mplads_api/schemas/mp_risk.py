@@ -27,9 +27,6 @@ class MPRiskResponse(BaseModel):
     constituency: Optional[str] = None
     allocated_amount: float
     total_sanctioned_amount: float
-    total_expenditure_amount: Optional[float] = 0.0
-    expenditure_amount: Optional[float] = 0.0
-    expenditure: Optional[float] = 0.0
     composite_risk_score: float
     risk_tier: str
     allocation_utilization_pct: float
@@ -40,8 +37,8 @@ class MPRiskResponse(BaseModel):
 class StateRiskResponse(BaseModel):
     state: str
     mp_count: int
-    mean_composite_risk_score: float
-    mean_allocation_utilization_pct: float
+    mean_composite_risk_score: Optional[float] = None
+    mean_allocation_utilization_pct: Optional[float] = None
     critical_mp_count: int
     high_mp_count: int
     medium_mp_count: int
