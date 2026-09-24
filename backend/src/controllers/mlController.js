@@ -4,13 +4,22 @@ import { env } from '../config/env.js';
 const getFastApiBaseUrl = () => (env.fastApiUrl || 'http://localhost:8000').replace(/\/+$/, '');
 
 async function forwardToFastApi(targetUrl, options, res) {
+  if (!env.fastApiEnabled || !env.fastApiUrl) {
+    return res.status(503).json({
+      code: 'ANALYTICS_UNAVAILABLE',
+      message: 'Advanced analytics are not configured in this environment.',
+      detail: 'The core platform remains available. Configure FASTAPI_URL and FASTAPI_ENABLED=true to enable analytics.',
+    });
+  }
+
   let response;
   try {
     response = await fetch(targetUrl, options);
   } catch (err) {
     return res.status(503).json({
-      message: 'ML analytics service is currently unavailable. Please ensure the ML service is running.',
-      detail: 'Failed to connect to ML analytics service.',
+      code: 'ANALYTICS_UNAVAILABLE',
+      message: 'Advanced analytics service is currently unavailable.',
+      detail: 'FastAPI is enabled but could not be reached.',
     });
   }
 

@@ -599,7 +599,7 @@ export default function WorkInvestigation({ workId, user, onNavigate, onSignOut 
                     </h2>
                     <p style={{ color: '#b81821' }}>{mlError}</p>
                     <small>
-                      Ensure FastAPI is running on port 8000 and Express is proxying /api/analytics endpoints.
+                      Advanced analytics are optional in deployed environments. Locally, ensure FastAPI is running on port 8000.
                     </small>
                     <div style={{ marginTop: '10px' }}>
                       <button

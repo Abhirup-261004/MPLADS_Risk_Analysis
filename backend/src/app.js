@@ -15,7 +15,12 @@ import { agencyRouter } from './routes/agencyRoutes.js';
 import { governanceRouter } from './routes/governanceRoutes.js';
 
 export const app = express();
-app.use(cors({ origin: env.clientUrl }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || env.clientUrls.includes(origin)) return callback(null, true);
+    return callback(new Error('Origin is not allowed by CORS.'));
+  },
+}));
 app.use(express.json({ limit: '10kb' }));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/public', publicRouter);

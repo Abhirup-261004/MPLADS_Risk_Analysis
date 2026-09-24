@@ -269,3 +269,24 @@ cd frontend
 npm run build
 ```
 Validates compilation and module bundling for production.
+
+## Deployment Without FastAPI
+
+The Express API and React application can be deployed before FastAPI. Copy
+`backend/.env.production.example` to the deployment environment and keep
+`FASTAPI_ENABLED=false`. Core authentication, dashboards, works, risks, maps,
+reports, governance, and public pages remain available. Analytics-only requests
+return a clear `503 ANALYTICS_UNAVAILABLE` response instead of affecting the
+rest of the application.
+
+When FastAPI is deployed later, set the following environment variables on the
+Express service and redeploy it. No frontend code change is required.
+
+```env
+FASTAPI_ENABLED=true
+FASTAPI_URL=https://your-fastapi-domain.example
+```
+
+For the frontend deployment, set `VITE_API_URL` to the public HTTPS address of
+the Express API, including its `/api` suffix. See
+`frontend/.env.production.example`.
