@@ -1,7 +1,9 @@
+import gc
 import logging
 import json
 import math
 import re
+import os
 import joblib
 import numpy as np
 import pandas as pd
@@ -12,7 +14,6 @@ from mplads_api.config import settings
 logger = logging.getLogger("mplads_api.feature_store")
 
 def sanitize_record(record: Dict[str, Any]) -> Dict[str, Any]:
-    """Clean NaN, Inf, and numpy types for Pydantic JSON compliance."""
     clean = {}
     for k, v in record.items():
         if v is None or pd.isna(v):
@@ -31,7 +32,6 @@ def sanitize_record(record: Dict[str, Any]) -> Dict[str, Any]:
     return clean
 
 def normalize_text(text: str) -> str:
-    """Normalize string by stripping whitespace and non-alphanumeric characters."""
     if not text:
         return ""
     return re.sub(r"[^A-Z0-9]", "", str(text).upper().strip())
@@ -40,26 +40,15 @@ class FeatureStore:
     _instance = None
 
     def __init__(self):
-        self.fact_work: Optional[pd.DataFrame] = None
         self.mp_scorecard: Optional[pd.DataFrame] = None
-        self.vendor_risk: Optional[pd.DataFrame] = None
-        
-        # Model Binaries
         self.nlp_classifier: Optional[Any] = None
         self.nlp_taxonomy: Optional[Dict[str, Any]] = None
-        self.f1_iforest: Optional[Any] = None
-        self.f2_lof: Optional[Any] = None
-        self.f5_iforest: Optional[Any] = None
-        self.f7_kmeans: Optional[Any] = None
-        self.f7_iforest: Optional[Any] = None
         
-        # In-Memory Fast Lookup Indexes
         self.work_index: Dict[str, Dict[str, Any]] = {}
         self.mp_index: Dict[str, Dict[str, Any]] = {}
         self.vendor_index: Dict[str, Dict[str, Any]] = {}
         self.state_index: Dict[str, Dict[str, Any]] = {}
 
-        # Name Resolution Indexes
         self.name_to_keys_index: Dict[str, List[str]] = {}
         self.normalized_key_index: Dict[str, str] = {}
 
@@ -72,30 +61,31 @@ class FeatureStore:
     def load_all(self):
         logger.info("--- Initializing FeatureStore & Model Registry ---")
 
-        # 1. Load Feature 1 Work Disbursement Risk Table
         f1_path = settings.FEATURE1_ARTIFACT_DIR / "feature1_fact_work_disbursement_risk.parquet"
         if not f1_path.exists():
             f1_path = settings.SHARED_ARTIFACT_DIR / "fact_work_feature7.parquet"
             
         if f1_path.exists():
             logger.info("Loading Feature 1 work table from %s", f1_path)
-            f1_df = pd.read_parquet(f1_path) if str(f1_path).endswith(".parquet") else pd.read_csv(f1_path, low_memory=False)
-            for _, row in f1_df.iterrows():
-                clean_dict = sanitize_record(row.to_dict())
+            f1_df = pd.read_parquet(f1_path)
+            for row in f1_df.to_dict(orient="records"):
+                clean_dict = sanitize_record(row)
                 w_id = str(clean_dict.get("work_id", ""))
                 w_key = str(clean_dict.get("work_key", ""))
                 if w_id and w_id != "None":
                     self.work_index[w_id] = clean_dict
                 if w_key and w_key != "None":
                     self.work_index[w_key] = clean_dict
+            del f1_df
+        else:
+            logger.error("Required parquet missing: %s", f1_path)
 
-        # 2. Merge Feature 2 Work Cost Risk Data
         f2_path = settings.FEATURE2_ARTIFACT_DIR / "feature2_fact_work_cost_risk.parquet"
         if f2_path.exists():
             logger.info("Merging Feature 2 work table from %s", f2_path)
-            f2_df = pd.read_parquet(f2_path) if str(f2_path).endswith(".parquet") else pd.read_csv(f2_path, low_memory=False)
-            for _, row in f2_df.iterrows():
-                clean_dict = sanitize_record(row.to_dict())
+            f2_df = pd.read_parquet(f2_path)
+            for row in f2_df.to_dict(orient="records"):
+                clean_dict = sanitize_record(row)
                 w_id = str(clean_dict.get("work_id", ""))
                 w_key = str(clean_dict.get("work_key", ""))
                 target_keys = [k for k in [w_id, w_key] if k and k != "None"]
@@ -104,31 +94,29 @@ class FeatureStore:
                         self.work_index[k].update(clean_dict)
                     else:
                         self.work_index[k] = clean_dict
+            del f2_df
+        else:
+            logger.error("Required parquet missing: %s", f2_path)
 
+        gc.collect()
         logger.info("Indexed %d combined work records.", len(self.work_index))
 
-        # 3. Load Feature 7 MP Master Scorecard
         mp_path = settings.FEATURE7_ARTIFACT_DIR / "feature7_mp_composite_risk.parquet"
-        if not mp_path.exists():
-            mp_path = settings.FEATURE7_ARTIFACT_DIR / "feature7_mp_composite_risk.csv"
-
         if mp_path.exists():
             logger.info("Loading MP composite scorecard from %s", mp_path)
-            self.mp_scorecard = pd.read_parquet(mp_path) if str(mp_path).endswith(".parquet") else pd.read_csv(mp_path, low_memory=False)
-            for _, row in self.mp_scorecard.iterrows():
-                clean_dict = sanitize_record(row.to_dict())
+            self.mp_scorecard = pd.read_parquet(mp_path)
+            for row in self.mp_scorecard.to_dict(orient="records"):
+                clean_dict = sanitize_record(row)
                 mp_k = str(clean_dict.get("mp_key", ""))
                 mp_name = str(clean_dict.get("mp_name_clean", ""))
 
                 if mp_k and mp_k != "None":
                     self.mp_index[mp_k] = clean_dict
 
-                    # Index normalized key
                     norm_k = normalize_text(mp_k)
                     if norm_k:
                         self.normalized_key_index[norm_k] = mp_k
 
-                    # Index clean name
                     norm_name = normalize_text(mp_name)
                     if norm_name:
                         if norm_name not in self.name_to_keys_index:
@@ -138,7 +126,6 @@ class FeatureStore:
 
             logger.info("Indexed %d MP composite scorecards (%d clean names).", len(self.mp_index), len(self.name_to_keys_index))
 
-            # Build State Rollup Index from MP Scorecard
             state_groups = self.mp_scorecard.groupby("state")
             for state_name, group in state_groups:
                 st_str = str(state_name).upper().strip()
@@ -153,24 +140,24 @@ class FeatureStore:
                     "low_mp_count": int((group["ml_augmented_risk_tier"] == "Low").sum()) if "ml_augmented_risk_tier" in group else int((group["composite_risk_tier"] == "Low").sum()),
                 }
                 self.state_index[st_str] = sanitize_record(record_dict)
+        else:
+            logger.error("Required parquet missing: %s", mp_path)
 
-        # 4. Load Feature 5 Vendor Master Table
         vendor_path = settings.FEATURE5_ARTIFACT_DIR / "feature5_vendor_risk.parquet"
-        if not vendor_path.exists():
-            vendor_path = settings.FEATURE5_ARTIFACT_DIR / "feature5_vendor_risk.csv"
-
         if vendor_path.exists():
             logger.info("Loading vendor risk table from %s", vendor_path)
-            self.vendor_risk = pd.read_parquet(vendor_path) if str(vendor_path).endswith(".parquet") else pd.read_csv(vendor_path, low_memory=False)
-            for _, row in self.vendor_risk.iterrows():
-                clean_dict = sanitize_record(row.to_dict())
+            vendor_df = pd.read_parquet(vendor_path)
+            for row in vendor_df.to_dict(orient="records"):
+                clean_dict = sanitize_record(row)
                 v_id = str(clean_dict.get("vendor_id", ""))
                 if v_id and v_id != "None":
                     self.vendor_index[v_id] = clean_dict
-
+            del vendor_df
+            gc.collect()
             logger.info("Indexed %d vendor risk records.", len(self.vendor_index))
+        else:
+            logger.error("Required parquet missing: %s", vendor_path)
 
-        # 5. Load Trained Model Binaries (.joblib)
         clf_path = settings.FEATURE3_ARTIFACT_DIR / "feature3_tfidf_lightgbm_classifier.joblib"
         if clf_path.exists():
             try:
@@ -187,51 +174,28 @@ class FeatureStore:
             except Exception as e:
                 logger.error("Failed to load taxonomy config: %s", e)
 
-        # Load additional .joblib model binaries for audit/verification
-        f1_m = settings.FEATURE1_ARTIFACT_DIR / "feature1_isolation_forest.joblib"
-        if f1_m.exists():
-            self.f1_iforest = joblib.load(f1_m)
-
-        f2_m = settings.FEATURE2_ARTIFACT_DIR / "feature2_lof_model.joblib"
-        if f2_m.exists():
-            self.f2_lof = joblib.load(f2_m)
-
-        f5_m = settings.FEATURE5_ARTIFACT_DIR / "feature5_isolation_forest.joblib"
-        if f5_m.exists():
-            self.f5_iforest = joblib.load(f5_m)
-
-        f7_k = settings.FEATURE7_ARTIFACT_DIR / "feature7_kmeans_model.joblib"
-        if f7_k.exists():
-            self.f7_kmeans = joblib.load(f7_k)
-
-        f7_i = settings.FEATURE7_ARTIFACT_DIR / "feature7_isolation_forest.joblib"
-        if f7_i.exists():
-            self.f7_iforest = joblib.load(f7_i)
-
-        logger.info("--- FeatureStore Load Complete ---")
+        try:
+            import psutil
+            rss_mb = psutil.Process().memory_info().rss // (1024 * 1024)
+        except ImportError:
+            rss_mb = 0
+        logger.info("--- FeatureStore Load Complete (works=%d, mps=%d, vendors=%d, rss=%dMB) ---",
+                     len(self.work_index), len(self.mp_index), len(self.vendor_index), rss_mb)
 
     def resolve_mp(self, identifier: str, house: Optional[str] = None, state: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
-        """
-        Resolves an MP identifier (plain name, key, or partial string) to a single record or returns candidate matches.
-        Returns:
-            (single_matching_record, candidate_records_list)
-        """
         if not identifier or not identifier.strip():
             return None, []
 
         raw_input = identifier.strip()
         norm_input = normalize_text(raw_input)
 
-        # Tier 1: Exact key match
         if raw_input in self.mp_index:
             return self.mp_index[raw_input], []
 
-        # Tier 2: Normalized key match (e.g. "RSKARTIKEYASHARMA" or "RS_KARTIKEYA_SHARMA")
         if norm_input in self.normalized_key_index:
             canonical_key = self.normalized_key_index[norm_input]
             return self.mp_index[canonical_key], []
 
-        # Tier 3: Handle user prefixing house (e.g., "RS Kartikeya Sharma" or "LS-Kriti Devi")
         if norm_input.startswith("LS") or norm_input.startswith("RS"):
             prefix = norm_input[:2]
             rest = norm_input[2:]
@@ -240,25 +204,20 @@ class FeatureStore:
                     if k.startswith(prefix + "_"):
                         return self.mp_index[k], []
 
-        # Tier 4: Exact Clean Name Match
         candidate_keys = list(self.name_to_keys_index.get(norm_input, []))
 
-        # Tier 5: Substring / Partial Name Search if clean name match yielded no candidates
         if not candidate_keys:
             for norm_name, keys in self.name_to_keys_index.items():
                 if norm_input in norm_name or norm_name in norm_input:
                     candidate_keys.extend(keys)
 
-        # Deduplicate candidate keys while preserving order
         candidate_keys = list(dict.fromkeys(candidate_keys))
 
         if not candidate_keys:
             return None, []
 
-        # Build list of candidate record dicts
         candidate_records = [self.mp_index[k] for k in candidate_keys if k in self.mp_index]
 
-        # Filter candidates by house / state if supplied in query parameters
         filtered = candidate_records
         if house:
             h_upper = house.upper().strip()
@@ -267,9 +226,7 @@ class FeatureStore:
             st_norm = normalize_text(state)
             filtered = [c for c in filtered if st_norm in normalize_text(c.get("state", ""))]
 
-        # If filtering produces exactly 1 unambiguous match
         if len(filtered) == 1:
             return filtered[0], []
 
-        # If multiple candidates remain or filter returned 0, return candidate list
         return None, filtered if filtered else candidate_records

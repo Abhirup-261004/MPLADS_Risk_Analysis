@@ -29,6 +29,12 @@ Fix:
 Verify: request without header returns 401, with correct header returns 200,
 /health returns 200 without a key.
 
+**Solution Applied:**
+- `security.py`: Replaced silent-pass with `HTTPException(401)`. Added `MPLADS_ENV=development` escape hatch. Raises 500 if `API_KEY` not configured in prod.
+- `config.py`: Changed `API_KEY` type to `Optional[str]`, default `os.getenv("MPLADS_API_KEY", None)`. No hardcoded secret.
+- All routers (`disbursement.py`, `cost.py`, `vendor.py`, `mp_risk.py`, `categorize.py`): Added `dependencies=[Depends(verify_api_key)]` at router level.
+- `dashboard.py`: `/health` has no auth dependency. `/dashboard/summary` has `Depends(verify_api_key)`.
+
 ## ML-2 - Five anomaly models loaded but never used for inference
 
 Location: feature_store.py lines 190-209, all routers, ML.md F1 ensemble text.
@@ -37,6 +43,8 @@ Observed: f1_iforest, f2_lof, f5_iforest, f7_kmeans and f7_iforest are loaded
 at startup but no router reads them. Only nlp_classifier is live. All served
 scores come from pre-computed parquet columns. ML.md says F1 is a 5-seed
 ensemble, the repo has a single feature1_isolation_forest.joblib.
+
+**Not severe — skipped.** Models load without error. Removing them saves memory but they serve as audit artifacts. No functional impact on deployment. Model fields removed from FeatureStore.__init__ and load_all to reduce startup time (combined with ML-7).
 
 ## ML-3 - Silent or-zero and Low defaults hide data gaps
 
@@ -56,6 +64,12 @@ mapping helpers per router so valid rows stay byte-identical.
 
 Verify: a disbursement_unknown work and an Insufficient MP return Unknown tier.
 
+**Solution Applied:**
+- `disbursement.py`: Added `_resolve_disbursement_tier()` helper. Returns "Unknown" when `coverage_flag == "disbursement_unknown"` or score is None.
+- `cost.py`: Added `_resolve_cost_tier()` helper. Returns "Unknown" when score is None or `peer_group_size == 0`.
+- `vendor.py`: Added `_resolve_vendor_tier()` helper. Returns "Unknown" when score is None.
+- `mp_risk.py`: Added `_resolve_mp_tier()` helper. Checks `composite_data_quality_tier == "Insufficient"` and all subscores None → returns "Unknown / Insufficient Data".
+
 ## ML-4 - requirements.txt floats everything except sklearn
 
 Location: repo-root requirements.txt; plan S2 and S14 claim deterministic builds.
@@ -73,6 +87,9 @@ is needed for this fix, only exact upper bounds.
 Verify: fresh docker build with no cache plus pytest is green, and
 joblib.load of feature3_tfidf_lightgbm_classifier.joblib plus predict works.
 
+**Solution Applied:**
+- `requirements.txt`: All dependencies pinned with `==` (fastapi==0.115.6, uvicorn==0.34.0, pydantic==2.10.4, pydantic-settings==2.7.1, pandas==2.2.3, numpy==1.26.4, pyarrow==18.1.0, joblib==1.4.2, scikit-learn==1.6.1, lightgbm==4.5.0, httpx==0.28.1, pytest==8.3.4). Target Python 3.11.
+
 ## ML-5 - Invalid CORS wildcard plus credentials
 
 Location: mplads_api/main.py lines 27-33. Plan S14 rates CORS Very Low.
@@ -87,6 +104,8 @@ Content-Type. Or list the exact frontend origin if docs UI needs browser access.
 Express proxy path is unchanged.
 
 Verify: preflight from a disallowed origin is blocked, Express fetch works.
+
+**Not severe — skipped.** Express backend uses server-side httpx/fetch, not browser CORS. No functional impact on deployment.
 
 ## ML-6 - Dead CSV fallback paths that can never trigger
 
@@ -104,6 +123,9 @@ Update the plan so it stops claiming CSV exclusion matters.
 
 Verify: with parquet present behavior is identical, with parquet deleted the
 log names the missing file instead of trying an impossible CSV.
+
+**Solution Applied:**
+- `feature_store.py`: Removed all `read_csv` fallback branches. All loads now use `pd.read_parquet()` exclusively. Missing parquets log an error with the exact path via `logger.error("Required parquet missing: %s", path)`. The F1→F7 parquet fallback is preserved.
 
 ## ML-7 - Blocking iterrows startup load with no readiness signal
 
@@ -124,6 +146,9 @@ because that would create a latency regression.
 
 Verify: /health counts unchanged, sampled score payloads byte-identical,
 startup seconds and RSS drop.
+
+**Solution Applied:**
+- `feature_store.py`: Replaced all `iterrows()` loops with `to_dict(orient="records")` batch iteration. Added `del f1_df`, `del f2_df`, `del vendor_df` + `gc.collect()` after indexing. Removed unused model instance attributes (`f1_iforest`, `f2_lof`, `f5_iforest`, `f7_kmeans`, `f7_iforest`) and their loading code — addresses ML-2 simultaneously. Removed `fact_work` DataFrame attribute (only dict indexes kept). Added RSS logging at end of `load_all`. Missing parquets now log errors instead of silently skipping.
 
 ## Explicitly out of scope (deployment-only, not fixed here)
 

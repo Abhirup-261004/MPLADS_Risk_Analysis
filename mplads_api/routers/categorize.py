@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from mplads_api.schemas.categorize import CategorizeRequest, CategorizeResponse, AlternativeCategory
 from mplads_api.core.feature_store import FeatureStore
+from mplads_api.core.security import verify_api_key
 
-router = APIRouter(prefix="/nlp", tags=["NLP Categorization"])
+router = APIRouter(prefix="/nlp", tags=["NLP Categorization"], dependencies=[Depends(verify_api_key)])
 
 @router.post("/categorize-work", response_model=CategorizeResponse)
 def categorize_work(req: CategorizeRequest):

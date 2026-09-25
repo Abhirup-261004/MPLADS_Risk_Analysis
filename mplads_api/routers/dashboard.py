@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Optional
 from mplads_api.core.feature_store import FeatureStore
 from mplads_api.schemas.dashboard import HealthResponse
+from mplads_api.core.security import verify_api_key
 
 router = APIRouter(tags=["Dashboard & Operations"])
 
@@ -16,7 +17,7 @@ def health_check():
         classifier_loaded=store.nlp_classifier is not None
     )
 
-@router.get("/dashboard/summary")
+@router.get("/dashboard/summary", dependencies=[Depends(verify_api_key)])
 def get_dashboard_summary(level: str = Query("mp", enum=["mp", "state"]), id: Optional[str] = None):
     store = FeatureStore.get_instance()
 

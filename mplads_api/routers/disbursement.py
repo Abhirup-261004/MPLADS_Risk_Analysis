@@ -1,8 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from mplads_api.schemas.disbursement import DisbursementRiskRequest, DisbursementRiskResponse, PeerGroupContext
 from mplads_api.core.feature_store import FeatureStore
+from mplads_api.core.security import verify_api_key
 
-router = APIRouter(prefix="/score", tags=["Disbursement Risk"])
+router = APIRouter(prefix="/score", tags=["Disbursement Risk"], dependencies=[Depends(verify_api_key)])
+
+def _resolve_disbursement_tier(score_raw, tier_raw, coverage):
+    if coverage == "disbursement_unknown" or score_raw is None:
+        return "Unknown"
+    return str(tier_raw) if tier_raw else "Unknown"
 
 @router.post("/disbursement-risk", response_model=DisbursementRiskResponse)
 def get_disbursement_risk(req: DisbursementRiskRequest):
@@ -17,9 +23,10 @@ def get_disbursement_risk(req: DisbursementRiskRequest):
     shortfall_val = work_record.get("shortfall_deficit_pct")
     shortfall = float(shortfall_val) if shortfall_val is not None else 0.0
     zscore = float(work_record.get("peer_shortfall_zscore") or 0.0)
-    risk_score = float(work_record.get("disbursement_risk_score") or 0.0)
-    risk_tier = str(work_record.get("disbursement_risk_tier") or "Low")
+    score_raw = work_record.get("disbursement_risk_score")
+    risk_score = float(score_raw) if score_raw is not None else 0.0
     coverage = str(work_record.get("coverage_flag") or "disbursement_known")
+    risk_tier = _resolve_disbursement_tier(score_raw, work_record.get("disbursement_risk_tier"), coverage)
     explanation = work_record.get("disbursement_risk_explanation")
 
     return DisbursementRiskResponse(

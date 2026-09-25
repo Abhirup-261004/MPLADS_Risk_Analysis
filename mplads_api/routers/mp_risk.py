@@ -1,10 +1,23 @@
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status, Depends
 from fastapi.responses import JSONResponse
 from typing import Optional
 from mplads_api.schemas.mp_risk import MPRiskResponse, StateRiskResponse, SubscoreBreakdown, SubscoreDetail, VendorSubscoreDetail, ScorecardWeights
 from mplads_api.core.feature_store import FeatureStore
+from mplads_api.core.security import verify_api_key
 
-router = APIRouter(prefix="/score", tags=["MP Composite Risk"])
+router = APIRouter(prefix="/score", tags=["MP Composite Risk"], dependencies=[Depends(verify_api_key)])
+
+def _resolve_mp_tier(record):
+    quality = str(record.get("composite_data_quality_tier") or "")
+    score_raw = record.get("ml_augmented_composite_risk_score") or record.get("composite_risk_score")
+    if quality == "Insufficient" or score_raw is None:
+        s_f1 = record.get("s_f1")
+        s_f2 = record.get("s_f2")
+        s_f5 = record.get("s_f5")
+        if s_f1 is None and s_f2 is None and s_f5 is None:
+            return "Unknown / Insufficient Data", 0.0
+    tier_raw = record.get("ml_augmented_risk_tier") or record.get("composite_risk_tier")
+    return str(tier_raw) if tier_raw else "Unknown", float(score_raw) if score_raw is not None else 0.0
 
 @router.get("/mp-risk/{mp_identifier}", response_model=MPRiskResponse)
 def get_mp_risk(
@@ -16,8 +29,7 @@ def get_mp_risk(
     record, candidates = store.resolve_mp(mp_identifier, house=house, state=state)
 
     if record:
-        comp_score = float(record.get("ml_augmented_composite_risk_score") or record.get("composite_risk_score") or 0.0)
-        risk_tier = str(record.get("ml_augmented_risk_tier") or record.get("composite_risk_tier") or "Low")
+        risk_tier, comp_score = _resolve_mp_tier(record)
 
         return MPRiskResponse(
             mp_key=str(record.get("mp_key", mp_identifier)),

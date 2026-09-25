@@ -1,8 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from mplads_api.schemas.cost import CostAnomalyRequest, CostAnomalyResponse
 from mplads_api.core.feature_store import FeatureStore
+from mplads_api.core.security import verify_api_key
 
-router = APIRouter(prefix="/score", tags=["Cost Risk"])
+router = APIRouter(prefix="/score", tags=["Cost Risk"], dependencies=[Depends(verify_api_key)])
+
+def _resolve_cost_tier(score_raw, tier_raw, peer_size):
+    if score_raw is None or peer_size == 0:
+        return "Unknown"
+    return str(tier_raw) if tier_raw else "Unknown"
 
 @router.post("/cost-anomaly", response_model=CostAnomalyResponse)
 def get_cost_anomaly(req: CostAnomalyRequest):
@@ -17,8 +23,9 @@ def get_cost_anomaly(req: CostAnomalyRequest):
     cost_ratio = float(work_record.get("sanction_peer_ratio") or (amount / peer_median if peer_median > 0 else 1.0))
     peer_size = int(work_record.get("peer_group_size") or work_record.get("peer_count") or 0)
     zscore = float(work_record.get("peer_cost_zscore") or 0.0)
-    cost_score = float(work_record.get("cost_risk_score") or 0.0)
-    risk_tier = str(work_record.get("cost_risk_tier") or "Low")
+    score_raw = work_record.get("cost_risk_score")
+    cost_score = float(score_raw) if score_raw is not None else 0.0
+    risk_tier = _resolve_cost_tier(score_raw, work_record.get("cost_risk_tier"), peer_size)
     explanation = work_record.get("cost_risk_explanation")
 
     return CostAnomalyResponse(

@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -15,7 +16,7 @@ class Settings(BaseSettings):
 
     API_TITLE: str = "MPLADS Risk Analytics API"
     API_VERSION: str = "1.0.0"
-    API_KEY: str = os.getenv("MPLADS_API_KEY", "mplads-secret-key-2026")
+    API_KEY: Optional[str] = os.getenv("MPLADS_API_KEY", None)
 
 
 settings = Settings()

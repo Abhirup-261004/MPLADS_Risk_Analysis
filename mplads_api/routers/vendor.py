@@ -1,8 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from mplads_api.schemas.vendor import VendorRiskResponse
 from mplads_api.core.feature_store import FeatureStore
+from mplads_api.core.security import verify_api_key
 
-router = APIRouter(prefix="/score", tags=["Vendor Risk"])
+router = APIRouter(prefix="/score", tags=["Vendor Risk"], dependencies=[Depends(verify_api_key)])
+
+def _resolve_vendor_tier(score_raw, tier_raw):
+    if score_raw is None:
+        return "Unknown"
+    return str(tier_raw) if tier_raw else "Unknown"
 
 @router.get("/vendor-risk/{vendor_id}", response_model=VendorRiskResponse)
 def get_vendor_risk(vendor_id: str):
@@ -12,6 +18,7 @@ def get_vendor_risk(vendor_id: str):
     if not vendor_record:
         raise HTTPException(status_code=404, detail=f"Vendor ID '{vendor_id}' not found in vendor master index.")
 
+    score_raw = vendor_record.get("vendor_risk_score")
     return VendorRiskResponse(
         vendor_id=str(vendor_record.get("vendor_id", vendor_id)),
         vendor_name_raw=str(vendor_record.get("vendor_name_raw") or "Unknown Vendor"),
@@ -25,7 +32,7 @@ def get_vendor_risk(vendor_id: str):
         top_mp_spend_share=float(vendor_record.get("top_mp_spend_share") or 0.0),
         hhi_within_mp=float(vendor_record.get("hhi_within_mp") or 0.0),
         high_risk_work_ratio=float(vendor_record.get("high_risk_work_ratio") or 0.0),
-        vendor_risk_score=float(vendor_record.get("vendor_risk_score") or 0.0),
-        risk_tier=str(vendor_record.get("vendor_risk_tier") or "Low Volume / Unrated"),
+        vendor_risk_score=float(score_raw) if score_raw is not None else 0.0,
+        risk_tier=_resolve_vendor_tier(score_raw, vendor_record.get("vendor_risk_tier")),
         explanation=str(vendor_record.get("vendor_risk_explanation") or "")
     )
