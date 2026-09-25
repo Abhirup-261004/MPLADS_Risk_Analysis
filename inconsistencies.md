@@ -56,19 +56,70 @@ all-clear. ML.md Feature 1 requires coverage_flag disbursement_unknown with no
 score, and Feature 7 requires Complete, Partial and Insufficient tiers with 197
 MPs as Unknown. An Insufficient MP is currently returned as Low with score 0.0.
 
-Fix: keep schemas, add explicit unknown signalling. Disbursement rows with null
-score or disbursement_unknown coverage return tier Unknown, not Low. Cost rows
-with peer_group_size 0 or null score return Unknown. MP rows with all subscores
-null or quality Insufficient return Unknown / Insufficient Data. Use small
-mapping helpers per router so valid rows stay byte-identical.
+Fix: keep schemas as non-optional `float` and treat `0.0 + Unknown tier` as the
+documented NO-SCORE sentinel (never `Optional[float]`, never a `None` score —
+both break the Express/frontend numeric contract). Bound the fix to three
+surgical changes: fail-closed coverage default + `is not None` score/tier
+selection + tier helpers. Valid rows stay byte-identical; only genuinely
+missing data flips to Unknown.
 
-Verify: a disbursement_unknown work and an Insufficient MP return Unknown tier.
+Verify: a disbursement_unknown work returns tier Unknown with score 0.0, an
+Insufficient MP with all subscores null returns Unknown / Insufficient Data
+with score 0.0, a valid 0.0-score row keeps its real tier verbatim, and full
+pytest passes with MPLADS_API_KEY set and unset.
 
-**Solution Applied:**
+**Solution Applied (PARTIAL — introduces 3 new bugs):**
 - `disbursement.py`: Added `_resolve_disbursement_tier()` helper. Returns "Unknown" when `coverage_flag == "disbursement_unknown"` or score is None.
 - `cost.py`: Added `_resolve_cost_tier()` helper. Returns "Unknown" when score is None or `peer_group_size == 0`.
 - `vendor.py`: Added `_resolve_vendor_tier()` helper. Returns "Unknown" when score is None.
 - `mp_risk.py`: Added `_resolve_mp_tier()` helper. Checks `composite_data_quality_tier == "Insufficient"` and all subscores None → returns "Unknown / Insufficient Data".
+
+**New bugs introduced by the partial fix (must read before touching code):**
+1. `0.0 + "Unknown"` contradiction: helpers return tier `"Unknown"` but routers
+   still emit `risk_score = float(score_raw) if score_raw is not None else 0.0`
+   into a non-optional `float` schema. Downstream charts that average the score
+   without checking the tier will treat "no data" as "zero risk". Changing the
+   schema to `Optional[float]` is NOT the fix — Express `mlController.js` and
+   frontend `api.js` call numeric formatters on these fields and would crash on
+   `null`, so that change would trade one bug for a contract break.
+2. Falsy `or` swallows a valid `0.0` in `mp_risk.py:12`:
+   `record.get("ml_augmented_composite_risk_score") or record.get("composite_risk_score")`
+   falls through when the ML score is legitimately `0.0` (true low risk) and
+   returns the wrong column's value. Same pattern in line 19 for tiers and in
+   `float(record.get("s_f1") or 0.0)` subscores (harmless there only because the
+   target is display-only, but the tier/score selection is not).
+3. Fail-open coverage default in `disbursement.py:28`:
+   `str(work_record.get("coverage_flag") or "disbursement_known")` marks a
+   record with a missing/null flag as known-good, violating ML.md Principle 1.
+   A missing flag must fail closed to `"disbursement_unknown"`.
+
+**Concrete bug-free solution (schemas untouched, no contract break):**
+1. Keep all four score schemas as `float` (never `Optional[float]`). Document
+   the sentinel explicitly in each schema docstring / README: "`0.0` paired
+   with tier `Unknown` (or `Unknown / Insufficient Data`) means NO SCORE — check
+   `risk_tier` / `coverage_flag` / `composite_data_quality_tier` BEFORE reading
+   the numeric score. Never average scores where tier is Unknown."
+2. Replace every falsy score/tier selection with an explicit `is not None`
+   check (copy-paste safe, preserves valid `0.0`):
+   `ml = record.get("ml_augmented_composite_risk_score"); score_raw = ml if ml is not None else record.get("composite_risk_score")`
+   and likewise for `ml_augmented_risk_tier` vs `composite_risk_tier`. Leave the
+   `float(x or 0.0)` display-only subscores (`s_f1`, `z_s_f1`, amounts) as-is —
+   touching them adds churn with zero audit benefit.
+3. Change ONE default in `disbursement.py:28` to fail closed:
+   `coverage = str(work_record.get("coverage_flag") or "disbursement_unknown")`.
+   Valid linked rows already carry `linked_final` / `linked_tranche`, so they
+   are byte-identical; only genuinely missing flags flip from false-Known to
+   true-Unknown. Rely on the existing `sanitize_record` NaN→None normalisation
+   (`feature_store.py:16-32`) so no `NaN`/`Infinity` ever reaches `float()`.
+4. Do NOT add `explanation is None → ""` coercion churn beyond what exists;
+   `explanation: Optional[str] = None` already models "no explanation" and the
+   current `work_record.get(...)` pass-through preserves it.
+
+Verify (no infra change): unit-test each `_resolve_*` with `(None, real_tier)`
+→ `"Unknown"`, with `(0.0, "Low")` → `"Low"` preserved verbatim, synthetic
+`disbursement_unknown` record → `{"risk_tier": "Unknown", "disbursement_risk_score": 0.0,
+"coverage_flag": "disbursement_unknown"}`, then full `pytest` with
+`MPLADS_API_KEY` set and unset.
 
 ## ML-4 - requirements.txt floats everything except sklearn
 
@@ -147,8 +198,58 @@ because that would create a latency regression.
 Verify: /health counts unchanged, sampled score payloads byte-identical,
 startup seconds and RSS drop.
 
-**Solution Applied:**
+**Solution Applied (PARTIAL — introduces 3 new gaps):**
 - `feature_store.py`: Replaced all `iterrows()` loops with `to_dict(orient="records")` batch iteration. Added `del f1_df`, `del f2_df`, `del vendor_df` + `gc.collect()` after indexing. Removed unused model instance attributes (`f1_iforest`, `f2_lof`, `f5_iforest`, `f7_kmeans`, `f7_iforest`) and their loading code — addresses ML-2 simultaneously. Removed `fact_work` DataFrame attribute (only dict indexes kept). Added RSS logging at end of `load_all`. Missing parquets now log errors instead of silently skipping.
+
+**New gaps introduced / left by the partial fix (must read before touching code):**
+1. `mp_scorecard` DataFrame is STILL retained (`__init__:43`,
+   `load_all:107-142`): the 0.15 MB scorecard keeps the full frame plus
+   `mp_index` + `state_index` + `name_to_keys_index` + `normalized_key_index`
+   dicts, and `dashboard.py:39-43` still calls `sort_values` + `iterrows()` on
+   it — so the "replaced all iterrows" claim is false and the endpoint pays a
+   per-request sort on every `/dashboard/summary` call.
+2. `psutil` is imported but NOT in `requirements.txt`: on a fresh
+   `docker build --no-cache` the `import psutil` in `load_all:178` raises
+   `ImportError` on every boot, RSS always logs `0 MB`, and the single most
+   useful ML-7 health signal (startup memory) is silently dead — a direct
+   violation of ML.md Principle 1 the fix was supposed to enforce.
+3. Double-keyed `work_index` still stores the SAME full `clean_dict` object
+   under both `work_id` and `work_key` (`load_all:75-78`, merged F2 keys
+   `91-98`): every work row lives twice in RAM. Peak memory during load is also
+   unaddressed — `to_dict(orient="records")` materialises the entire frame as a
+   second list of dicts BEFORE the old frame is deleted, so peak ≈ 2× frame
+   during every parquet load.
+
+**Concrete bug-free solution (no response change, no new deps beyond one pin):**
+1. Add ONE line to `requirements.txt`: `psutil==6.1.0` (pure-wheel on
+   Python 3.11, no compiler needed). Do NOT replace with stdlib `resource`/
+   `os` — `resource` is Unix-only and `os` cannot report RSS, either of which
+   would re-break Render/Docker logging. Keep the existing
+   `try/except ImportError → rss_mb = 0` guard so a missing pin degrades to a
+   log line, never a boot crash.
+2. Pre-compute the dashboard Top-20 ONCE at startup instead of sorting per
+   request: after the MP loop, `sort_col = "ml_augmented_composite_risk_score"
+   if present else "composite_risk_score"`, `top20 = mp_df.sort_values(
+   by=sort_col, ascending=False).head(20)`, store
+   `self.mp_top20: List[dict] = [sanitize_record(r) for r in
+   top20.to_dict(orient="records")]`, then `del mp_df; gc.collect()`. Change
+   `dashboard.py:39-43` to `return store.mp_top20` (keep the
+   `list(store.mp_index.values())[:20]` fallback ONLY for the
+   parquet-missing path). Remove the `self.mp_scorecard` attribute entirely.
+   Responses stay byte-identical (same sort key, same 20 rows, same sanitiser)
+   while per-request sort + `iterrows()` disappears and steady-state RAM drops
+   by one full DataFrame.
+3. Do NOT attempt work_key alias dedup (`work_index[k] = same_dict`) or
+   chunked parquet streaming in this fix: aliasing to a shared reference risks
+   accidental cross-key mutation, and chunked reads change load ordering the
+   F2-merge depends on. The measured win (one deleted frame + no per-request
+   sort + real RSS logging) already resolves the Render-health-check symptom
+   without touching the lookup contract.
+
+Verify (no infra change): `/health` counts unchanged, sampled
+`/score/*` payloads byte-identical, `/dashboard/summary` returns the same 20
+`mp_key`s in the same order before/after, startup log shows non-zero
+`rss=...MB`, `grep -rn "iterrows" mplads_api/` returns zero hits.
 
 ## Explicitly out of scope (deployment-only, not fixed here)
 
