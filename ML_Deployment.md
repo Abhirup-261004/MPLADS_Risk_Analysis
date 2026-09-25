@@ -2,8 +2,8 @@
 
 **Project:** MPLADS Risk Analytics — Problem Statement 26102  
 **Author:** ML Ops Engineer  
-**Date:** 2026-09-25  
-**Status:** Ready for Execution
+**Date:** 2026-09-25 (updated 2026-09-26)  
+**Status:** Updated 2026-09-26 (rev 2) - aligned with ML-1 through ML-7 fixes; Dockerfile and render.yaml exist in repo root; doc/code drift from final review (D1-D4) resolved: `.dockerignore` block now matches the real file, parquet load wording corrected to 4-at-startup (5 baked), `MPLADS_ENV` marked optional, dev-default API key rotation warning added + startup WARNING log in `main.py`
 
 ---
 
@@ -13,9 +13,9 @@
 2. [Architecture Decision — Why Docker is Required](#2-architecture-decision--why-docker-is-required)
 3. [Target Deployment Architecture](#3-target-deployment-architecture)
 4. [Pre-Deployment Checklist](#4-pre-deployment-checklist)
-5. [Step 1 — Create the Dockerfile](#5-step-1--create-the-dockerfile)
-6. [Step 2 — Create .dockerignore](#6-step-2--create-dockerignore)
-7. [Step 3 — Update render.yaml Blueprint](#7-step-3--update-renderyaml-blueprint)
+5. [Step 1 — Verify the Dockerfile](#5-step-1--verify-the-dockerfile)
+6. [Step 2 — Verify .dockerignore](#6-step-2--verify-dockerignore)
+7. [Step 3 — Verify render.yaml Blueprint](#7-step-3--verify-renderyaml-blueprint)
 8. [Step 4 — Configure Environment Variables on Render](#8-step-4--configure-environment-variables-on-render)
 9. [Step 5 — Configure the Node.js Backend to Connect](#9-step-5--configure-the-nodejs-backend-to-connect)
 10. [Step 6 — Deploy & Validate](#10-step-6--deploy--validate)
@@ -68,9 +68,9 @@ The Express backend has a **fully-built reverse proxy** layer:
 
 | Category | Size | In Git? | Needed at Serving Time? |
 |---|---|---|---|
-| Parquet data files loaded by FeatureStore (F1, F2, F5, F7 + fallback) | ~30 MB | ✅ Yes | ✅ Yes |
-| Parquet data files NOT loaded (shared intermediates, F3/F5 intermediates) | ~70 MB | ✅ Yes | ❌ No |
-| Anomaly detection models — 5 Joblib files (F1 iforest, F2 LOF, F5 iforest, F7 kmeans, F7 iforest) | ~10 MB | ✅ Yes | ✅ Yes |
+| Parquet data files copied into the image (4 loaded at startup + 1 fallback: F1 9.48 + F2 9.75 + F5 vendor 0.76 + F7 MP 0.15 = ~20 MB loaded; F7 fallback `fact_work_feature7.parquet` 10.04 = ~30 MB total) | ~30 MB | ✅ Yes | ✅ Yes (4 loaded; fallback read only if F1 missing) |
+| Parquet data files NOT loaded (shared intermediates, F3/F5 intermediates, incl. 56 MB embeddings-adjacent npy counted below) | ~70 MB | ✅ Yes | ❌ No |
+| Anomaly audit models — 5 Joblib files (F1 3.65 + F2 3.82 + F5 0.89 + F7 iforest 1.30 + F7 kmeans 0.01) | ~10 MB | ✅ Yes | ❌ No - removed from FeatureStore startup in ML-2/ML-7 cleanup; kept in git only |
 | NLP classifier (`feature3_tfidf_lightgbm_classifier.joblib`) | ~6 MB | ✅ Yes | ✅ Yes |
 | Taxonomy config (`feature3_taxonomy_config.json`) | <0.1 MB | ✅ Yes | ✅ Yes |
 | HDBSCAN model (`feature3_hdbscan.joblib`) — training only | ~16 MB | ✅ Yes | ❌ No |
@@ -79,9 +79,9 @@ The Express backend has a **fully-built reverse proxy** layer:
 | Sentence Transformer weights | ~400 MB | ❌ Gitignored | ❌ No |
 
 > [!NOTE]
-> The gitignored files (`feature3_umap.joblib` and `feature3_sentence_transformer/`) are **not needed at serving time**. Additionally, `description_embeddings.npy` (56 MB) and `feature3_hdbscan.joblib` (16 MB) are in git but also **not needed** — the `.dockerignore` excludes them from the image. The production classifier is the lightweight TF-IDF+LightGBM pipeline (6 MB).
+> The gitignored files (`feature3_umap.joblib` and `feature3_sentence_transformer/`) are **not needed at serving time**. Additionally, `description_embeddings.npy` (56 MB) and `feature3_hdbscan.joblib` (16 MB) are in git but also **not needed** — the Dockerfile selective COPY plus `.dockerignore` excludes them from the image. The production classifier is the lightweight TF-IDF+LightGBM pipeline (6 MB).
 
-**Runtime image payload: ~120 MB of data/models → Docker image will be ~500–650 MB total** (base image + Python deps + runtime artifacts).
+**Runtime image payload: ~36 MB of data/models (30 MB parquet + 6 MB NLP classifier + taxonomy) copied selectively; ~10 MB of unused audit joblibs stay in git but are excluded from the image → Docker image is ~400-550 MB total** (base image + Python deps + runtime artifacts).
 
 ---
 
@@ -93,7 +93,7 @@ The Express backend has a **fully-built reverse proxy** layer:
 | **Docker on Render** | ✅ Selected | Full control over OS-level deps (`libgomp1` for LightGBM), deterministic builds, pinned scikit-learn version matches training environment exactly, and Render natively supports Docker web services. |
 
 > [!CAUTION]
-> The model artifacts were trained with **scikit-learn==1.6.1**. Loading `.joblib` files with a different scikit-learn version will raise `ModuleNotFoundError` or produce silent wrong results. Docker pins this version exactly.
+> The model artifacts were trained with **scikit-learn==1.6.1**. Loading `.joblib` files with a different scikit-learn version will raise `ModuleNotFoundError` or produce silent wrong results. Docker pins all serving deps exactly (see fully pinned `requirements.txt`; Python 3.11 target).
 
 ---
 
@@ -125,12 +125,15 @@ The Express backend has a **fully-built reverse proxy** layer:
 │                                │  Port: 8000                 │   │
 │                                │  Health: /health            │   │
 │                                │                             │   │
-│                                │  Loads on startup:          │   │
-│                                │  • 4 Parquet fact tables     │   │
-│                                │    (+ 1 fallback source)     │   │
-│                                │  • 6 Joblib model binaries  │   │
-│                                │  • 1 JSON taxonomy config   │   │
-│                                │  • In-memory indexes        │   │
+│                                │  Baked into image:            │   │
+│                                │  • 5 Parquet fact tables      │   │
+│                                │    (F1 + F2 + F5 vendor +     │   │
+│                                │     F7 MP + F7 fallback)      │   │
+│                                │    4 loaded at startup;       │   │
+│                                │    fallback only if F1 absent │   │
+│                                │  • 1 Joblib model (NLP clf)   │   │
+│                                │  • 1 JSON taxonomy config     │   │
+│                                │  • In-memory indexes          │   │
 │                                └────────────────────────────┘   │
 │                                          Singapore Region        │
 └─────────────────────────────────────────────────────────────────┘
@@ -139,16 +142,16 @@ The Express backend has a **fully-built reverse proxy** layer:
 ### Key Design Decisions
 
 1. **Same region (Singapore)** — minimizes inter-service latency between Express ↔ FastAPI
-2. **Internal HTTP, not public** — FastAPI is a web service with its own URL, but the frontend never calls it directly; all traffic flows through Express's auth layer
-3. **Startup loading pattern** — All Parquet + Joblib files are loaded into RAM once during the `lifespan` startup event. Subsequent requests are pure dict lookups (sub-millisecond).
+2. **Public URL but proxied access** — Render gives `mplads-ml` a public URL, but the frontend never calls it directly; all browser traffic flows through Express `/api/analytics/*` (JWT plus INTERNAL_ROLES, X-API-Key forwarded). Direct calls without `X-API-Key` return 401 by design.
+3. **Startup loading pattern** — 4 Parquet fact tables (F1 work risk, F2 cost risk, F5 vendor, F7 MP) plus the NLP classifier and taxonomy are loaded once during the `lifespan` startup event into dict indexes (frames released via del plus gc.collect; top-20 MPs precomputed). `shared_preprocessing_artifacts/fact_work_feature7.parquet` is baked into the image as a fallback that is read only when the F1 parquet is absent. Subsequent requests are pure dict lookups (sub-millisecond).
 
 ---
 
 ## 4. Pre-Deployment Checklist
 
-- [ ] Verify all Parquet and Joblib artifacts are committed to the repo (not gitignored)
-- [ ] Confirm `requirements.txt` has `scikit-learn==1.6.1` pinned
-- [ ] Confirm `.gitignore` excludes ONLY training-time artifacts (`feature3_umap.joblib`, `feature3_sentence_transformer/`)
+- [ ] Verify `Dockerfile`, `.dockerignore`, `render.yaml`, `requirements.txt`, and the 7 runtime artifacts (5 parquets — 4 loaded at startup plus the F1 fallback — plus NLP classifier plus taxonomy) are committed or staged (Dockerfile plus .dockerignore may still be untracked locally — run `git status --short` and `git add` them per §10a)
+- [ ] Confirm `requirements.txt` is fully pinned with == (fastapi, uvicorn, pydantic, pandas, numpy, pyarrow, joblib, scikit-learn==1.6.1, lightgbm, httpx, psutil, pytest) and targets Python 3.11
+- [ ] Confirm `.gitignore` excludes `*.csv` plus ONLY training-time artifacts (`feature3_umap.joblib`, `feature3_sentence_transformer/`); shared CSVs stay untracked by design since serving uses parquet
 - [ ] Ensure the repo is pushed to the Git provider connected to Render (GitHub/GitLab)
 - [ ] Have Render dashboard access with permission to create new services
 
@@ -158,13 +161,9 @@ Run this locally to confirm all required files are tracked by git:
 
 ```bash
 # All these should return the filename (tracked), not empty (untracked)
-git ls-files feature1_artifacts/feature1_isolation_forest.joblib
-git ls-files feature2_artifacts/feature2_lof_model.joblib
+git ls-files Dockerfile .dockerignore render.yaml requirements.txt
 git ls-files feature3_artifacts/feature3_tfidf_lightgbm_classifier.joblib
 git ls-files feature3_artifacts/feature3_taxonomy_config.json
-git ls-files feature5_artifacts/feature5_isolation_forest.joblib
-git ls-files feature7_artifacts/feature7_kmeans_model.joblib
-git ls-files feature7_artifacts/feature7_isolation_forest.joblib
 git ls-files feature7_artifacts/feature7_mp_composite_risk.parquet
 git ls-files feature5_artifacts/feature5_vendor_risk.parquet
 git ls-files feature1_artifacts/feature1_fact_work_disbursement_risk.parquet
@@ -174,9 +173,9 @@ git ls-files shared_preprocessing_artifacts/fact_work_feature7.parquet
 
 ---
 
-## 5. Step 1 — Create the Dockerfile
+## 5. Step 1 — Verify the Dockerfile
 
-Create `Dockerfile` in the repository root:
+`Dockerfile` already exists in the repo root. Verify its contents match below (selective per-file COPY, no whole-directory artifact copy):
 
 ```dockerfile
 # ──────────────────────────────────────────────────────────────────
@@ -207,14 +206,15 @@ RUN python -m venv /opt/venv && \
 # Stage 2: Production image (no build tools)
 FROM python:3.11-slim AS production
 
-# Runtime dependency: libgomp for LightGBM OpenMP threading
+# Runtime dependency: libgomp for LightGBM OpenMP threading, curl for HEALTHCHECK
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libgomp1 && \
+    apt-get install -y --no-install-recommends libgomp1 curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the virtual env from builder
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
 
 # Create non-root user for security
 RUN groupadd --gid 1001 appuser && \
@@ -225,13 +225,14 @@ WORKDIR /app
 # Copy ML service code
 COPY mplads_api/ ./mplads_api/
 
-# Copy pre-computed artifact directories
-COPY shared_preprocessing_artifacts/ ./shared_preprocessing_artifacts/
-COPY feature1_artifacts/ ./feature1_artifacts/
-COPY feature2_artifacts/ ./feature2_artifacts/
-COPY feature3_artifacts/ ./feature3_artifacts/
-COPY feature5_artifacts/ ./feature5_artifacts/
-COPY feature7_artifacts/ ./feature7_artifacts/
+# Copy only the runtime-required artifacts (selective per-file COPY)
+COPY shared_preprocessing_artifacts/fact_work_feature7.parquet ./shared_preprocessing_artifacts/fact_work_feature7.parquet
+COPY feature1_artifacts/feature1_fact_work_disbursement_risk.parquet ./feature1_artifacts/feature1_fact_work_disbursement_risk.parquet
+COPY feature2_artifacts/feature2_fact_work_cost_risk.parquet ./feature2_artifacts/feature2_fact_work_cost_risk.parquet
+COPY feature3_artifacts/feature3_tfidf_lightgbm_classifier.joblib ./feature3_artifacts/feature3_tfidf_lightgbm_classifier.joblib
+COPY feature3_artifacts/feature3_taxonomy_config.json ./feature3_artifacts/feature3_taxonomy_config.json
+COPY feature5_artifacts/feature5_vendor_risk.parquet ./feature5_artifacts/feature5_vendor_risk.parquet
+COPY feature7_artifacts/feature7_mp_composite_risk.parquet ./feature7_artifacts/feature7_mp_composite_risk.parquet
 
 # Copy requirements.txt for metadata
 COPY requirements.txt .
@@ -242,9 +243,9 @@ USER appuser
 # Expose the port uvicorn will bind to
 EXPOSE 8000
 
-# Health check for container orchestrators and Render
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+# Health check for local docker runs (Render uses healthCheckPath: /health instead)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Start uvicorn — Render sets $PORT, we default to 8000
 CMD ["sh", "-c", "uvicorn mplads_api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --timeout-keep-alive 120"]
@@ -256,91 +257,93 @@ CMD ["sh", "-c", "uvicorn mplads_api.main:app --host 0.0.0.0 --port ${PORT:-8000
 |---|---|
 | **`python:3.11-slim`** | Slim base (~50 MB) but includes glibc needed by numpy/scikit-learn. Alpine would fail on compiled wheels. |
 | **Multi-stage build** | Build stage has `build-essential` (~200 MB); production stage drops it, saving image size. |
-| **`--workers 1`** | Each worker loads ~120 MB of runtime artifacts into RAM. Render Starter plan has 512 MB RAM. One worker fits comfortably; two would risk OOM. |
+| **`--workers 1`** | Each worker holds ~60-100 MB of in-memory indexes (double-keyed work_index) plus the ~20 MB of parquets read at startup (~36 MB total artifacts baked into the image). One worker fits comfortably in 512 MB; two would risk OOM. Uses precomputed mp_top20 so no per-request sort. |
 | **`--timeout-keep-alive 120`** | Prevents Render's load balancer from dropping the connection on cold-start when loading artifacts (~15-30 sec). |
-| **`start-period=60s`** | Gives the FeatureStore 60 seconds to load all Parquet/Joblib files before health checks start failing. |
+| **`start-period=90s`** | Gives the FeatureStore 90 seconds to load the 4 startup parquets plus the NLP classifier before health checks start failing. Render uses healthCheckPath /health, not this Dockerfile HEALTHCHECK. |
 | **Non-root user** | Security best practice; prevents container escape attacks. |
 | **`${PORT:-8000}`** | Render injects `$PORT` at runtime; this respects it while defaulting to 8000 for local dev. |
 | **Docker `HEALTHCHECK`** | Used for local `docker run` and non-Render orchestrators. **Render ignores it** and uses `healthCheckPath: /health` from `render.yaml` instead. Both probe the same endpoint, so they are consistent. |
 
 ---
 
-## 6. Step 2 — Create .dockerignore
+## 6. Step 2 — Verify .dockerignore
 
-Create `.dockerignore` in the repository root:
+`.dockerignore` already exists in the repo root. Verify its contents match below (this block mirrors the real file exactly; global `*.csv` / `*.png` patterns are safe because every runtime artifact is `.parquet`, `.joblib`, or `.json`, and the tiny `*_run_metadata.json` files are never read by `FeatureStore.load_all` so they are not worth excluding):
 
 ```dockerignore
-# ── Node.js / Frontend (not needed in ML image) ──
+# Node.js and frontend stay out of the ML image
 backend/
 frontend/
 node_modules/
 
-# ── Training-only artifacts (large, not needed at serving time) ──
+# Training-only model artifacts (stay in git, never enter the image)
 feature3_artifacts/feature3_umap.joblib
 feature3_artifacts/feature3_sentence_transformer/
 feature3_artifacts/description_embeddings.npy
 feature3_artifacts/feature3_hdbscan.joblib
+
+# Intermediate parquets not read by FeatureStore.load_all
 feature3_artifacts/feature3_fact_work_enriched.parquet
 feature3_artifacts/feature3_work_categories.parquet
 feature3_artifacts/feature3_category_mismatch_worklist.parquet
+feature5_artifacts/feature5_fact_work_vendor_risk.parquet
+shared_preprocessing_artifacts/fact_work.parquet
+shared_preprocessing_artifacts/fact_work_feature1.parquet
+shared_preprocessing_artifacts/fact_work_feature2.parquet
+shared_preprocessing_artifacts/fact_work_feature3.parquet
+shared_preprocessing_artifacts/fact_work_feature5.parquet
+shared_preprocessing_artifacts/fact_work_vendor.parquet
+shared_preprocessing_artifacts/fact_calamity.parquet
+shared_preprocessing_artifacts/fact_expenditure.parquet
+shared_preprocessing_artifacts/fact_expenditure_rollup.parquet
+shared_preprocessing_artifacts/fact_work_quarantine.parquet
+shared_preprocessing_artifacts/dim_mp.parquet
+shared_preprocessing_artifacts/state_wise_summary.parquet
+shared_preprocessing_artifacts/vendor_resolution_table.parquet
 
-# ── Notebooks (training code, not serving code) ──
+# Unused audit models (kept in git, not loaded since ML-2 cleanup)
+feature1_artifacts/feature1_isolation_forest.joblib
+feature2_artifacts/feature2_lof_model.joblib
+feature5_artifacts/feature5_isolation_forest.joblib
+feature7_artifacts/feature7_isolation_forest.joblib
+feature7_artifacts/feature7_kmeans_model.joblib
+
+# Notebooks
 notebooks/
 
-# ── Version control and IDE ──
+# Git and docs
 .git/
 .gitignore
 .github/
-
-# ── Documentation ──
 *.md
 render.yaml
 
-# ── Python caches ──
+# Python caches
 __pycache__/
 *.pyc
 .pytest_cache/
 
-# ── Environment files ──
+# Env and OS files
 .env
 .env.*
-
-# ── OS files ──
 .DS_Store
 Thumbs.db
 
-# ── CSV files (Parquet files are used instead) ──
-# NOTE: We must NOT exclude the Parquet or Joblib files that the FeatureStore loads!
-shared_preprocessing_artifacts/*.csv
-feature1_artifacts/*.csv
-feature2_artifacts/*.csv
-feature3_artifacts/*.csv
-feature5_artifacts/*.csv
-feature7_artifacts/*.csv
+# CSVs (parquet is the serving format; gitignore already excludes *.csv)
+*.csv
 
-# ── Image assets (visualizations, not needed at serving time) ──
-feature1_artifacts/*.png
-feature2_artifacts/*.png
-feature3_artifacts/*.png
-feature5_artifacts/*.png
-feature7_artifacts/*.png
-
-# ── Run metadata JSON (informational only, not loaded by FeatureStore) ──
-feature1_artifacts/*_run_metadata.json
-feature2_artifacts/*_run_metadata.json
-feature3_artifacts/*_run_metadata.json
-feature5_artifacts/*_run_metadata.json
-feature7_artifacts/*_run_metadata.json
+# Visualizations
+*.png
 ```
 
 > [!TIP]
-> This `.dockerignore` keeps the Docker build context lean (~120 MB) by excluding the Node.js backend, frontend, notebooks, CSVs, training-only artifacts (`description_embeddings.npy`, `feature3_hdbscan.joblib`, intermediate Parquets), and visualization PNGs. Only the `mplads_api/` code, `requirements.txt`, and the **runtime-required** Parquet/Joblib/JSON artifact files are sent to the Docker daemon.
+> This `.dockerignore` plus selective COPY keeps the Docker build context and image lean (~36 MB runtime payload) by excluding the Node.js backend, frontend, notebooks, CSVs, training-only artifacts (`description_embeddings.npy`, `feature3_hdbscan.joblib`, intermediate Parquets), and visualization PNGs. Only the `mplads_api/` code, `requirements.txt`, and the **runtime-required** Parquet/Joblib/JSON artifact files are sent to the Docker daemon.
 
 ---
 
-## 7. Step 3 — Update render.yaml Blueprint
+## 7. Step 3 — Verify render.yaml Blueprint
 
-Replace the existing [`render.yaml`](file:///C:/Users/anura/OneDrive/Desktop/MPLADS_Risk_Analysis/render.yaml) with:
+`render.yaml` in the repo root must match below (already updated to add `mplads-ml`, remove the PORT override, and use `sync: false` secrets):
 
 ```yaml
 # Render Blueprint — Express API, React/Vite Frontend, FastAPI ML Service
@@ -378,6 +381,8 @@ services:
         value: "true"
       - key: FASTAPI_URL
         sync: false   # Set to https://mplads-ml.onrender.com in dashboard
+      - key: MPLADS_API_KEY
+        sync: false   # same strong random value as on mplads-ml
 
   # ──────────────────────────────────────────────
   # 2. React/Vite Frontend (Static Site)
@@ -406,10 +411,8 @@ services:
     plan: starter            # 512 MB RAM, 0.5 vCPU — sufficient for serving
     autoDeployTrigger: commit
     envVars:
-      - key: PORT
-        value: "8000"
       - key: MPLADS_API_KEY
-        value: "mpladsAPI123"
+        sync: false   # set a strong random value in the dashboard on both services
       - key: PYTHONUNBUFFERED
         value: "1"
 ```
@@ -422,7 +425,7 @@ services:
 | `FASTAPI_URL` added | Points Express at the new ML service's Render URL |
 | **New service block** added | `mplads-ml` — Docker web service for FastAPI |
 | **Same region** | Both Express and FastAPI in `singapore` for minimal latency |
-| **`starter` plan** | 512 MB RAM, adequate for ~200 MB of in-memory artifacts + Python overhead |
+| **`starter` plan** | 512 MB RAM, adequate for ~60-100 MB of in-memory indexes plus Python overhead (precomputed mp_top20, frames released with del plus gc.collect) |
 
 > [!WARNING]
 > The `plan: starter` ($7/month) is the minimum paid tier with enough RAM. The free tier has 512 MB too, but spins down after 15 minutes of inactivity — causing 30-60 second cold starts where the FeatureStore reloads all artifacts. For production use, `starter` or higher is recommended.
@@ -438,6 +441,7 @@ After deploying the blueprint, set these values **manually** in the Render dashb
 | Variable | Value |
 |---|---|
 | `FASTAPI_URL` | `https://mplads-ml.onrender.com` (the URL Render assigns to the ML service) |
+| `MPLADS_API_KEY` | strong random value via `sync: false`, identical on both services (code default `mpladsAPI123` is dev-only) |
 | `MONGODB_URI` | *(keep existing value)* |
 | `JWT_SECRET` | *(keep existing value)* |
 | `CLIENT_URL` | *(keep existing value — your frontend URL)* |
@@ -446,12 +450,15 @@ After deploying the blueprint, set these values **manually** in the Render dashb
 
 | Variable | Value |
 |---|---|
-| `PORT` | `8000` (auto-set by render.yaml) |
-| `MPLADS_API_KEY` | `mpladsAPI123` (must match the same variable on the Express service) |
+| `MPLADS_API_KEY` | **New** strong random value via `sync: false`, identical on both services — see warning below |
+| `MPLADS_ENV` | *Optional.* Only needed for explicitness; its absence already means auth-enforced (see NOTE) |
 | `PYTHONUNBUFFERED` | `1` (ensures logs stream in real-time to Render's log viewer) |
 
+> [!WARNING]
+> **Do not reuse `mpladsAPI123` in production.** The old `render.yaml` committed the literal value `mpladsAPI123` as `MPLADS_API_KEY`, so that string is permanently public in this repo's git history. `config.py` falls back to that default when `MPLADS_API_KEY` is unset, which would silently leave the service protected only by a publicly known key. Generate a fresh secret (e.g. `python -c "import secrets; print(secrets.token_urlsafe(32))"`) and set it via `sync: false` on **both** services. `main.py` now logs a startup `WARNING` if the service boots in non-development mode while still using the dev default, and §10c includes a verification curl for it.
+
 > [!NOTE]
-> `verify_api_key` in `security.py` now **enforces** auth: it raises `HTTPException(401)` on a missing/wrong `X-API-Key` and `500` if no key is configured. `mlController.js` forwards `X-API-Key` on every proxied call. The key must be **identical** on both services; the default in code/env templates is `mpladsAPI123`.
+> `MPLADS_ENV` is absent in `render.yaml` by design: production defaults to enforced auth (no escape hatch). Only set `MPLADS_ENV=development` locally for tests. `verify_api_key` in `security.py` now **enforces** auth: it raises `HTTPException(401)` on a missing/wrong `X-API-Key` and `500` if no key is configured. `mlController.js` forwards `X-API-Key` on every proxied call. The key must be **identical** on both services; the default in code/env templates is `mpladsAPI123` (dev-only, must be rotated — see warning above).
 
 ---
 
@@ -462,11 +469,11 @@ The Express backend is **already fully configured** to proxy to FastAPI. No code
 ```
 Frontend                Express Backend              FastAPI ML Service
   │                        │                             │
-  │  GET /api/analytics/   │                             │
-  │  mp-risk/SANJAY_SETH   │                             │
+  │  GET /api/analytics/   │  JWT plus INTERNAL_ROLES     │
+  │  dashboard-summary    │  X-API-Key forwarded          │
   │───────────────────────▶│                             │
-  │                        │  GET /score/mp-risk/        │
-  │                        │  SANJAY_SETH                │
+  │                        │  GET /dashboard/summary     │
+  │                        │  X-API-Key: MPLADS_API_KEY    │
   │                        │────────────────────────────▶│
   │                        │                             │
   │                        │◀────────────────────────────│
@@ -475,7 +482,7 @@ Frontend                Express Backend              FastAPI ML Service
   │  200 OK (proxied JSON) │                             │
 ```
 
-The only action required is setting `FASTAPI_ENABLED=true` and `FASTAPI_URL` in the Express service's environment, which the updated `render.yaml` already does.
+The proxy already forwards `X-API-Key` (ML-1 fix) and requires JWT plus INTERNAL_ROLES on `/api/analytics/*`. The only action required is setting `FASTAPI_ENABLED=true`, `FASTAPI_URL` (two-step: deploy `mplads-ml` first, then paste its URL), and matching `MPLADS_API_KEY` (`sync: false`) on both services, which the updated `render.yaml` already declares. Note: use `/api/analytics/dashboard-summary` on Express (it maps to FastAPI `/dashboard/summary`), and URL-encode MP identifiers because ambiguous names return 400 plus candidates.
 
 ---
 
@@ -506,7 +513,7 @@ git push origin main
    - Docker image build: ~3–5 minutes (first build; cached afterward)
    - Artifact copy into image: ~30 seconds
    - Startup / FeatureStore load: ~15–30 seconds
-3. Health check at `/health` should turn green within 60 seconds of container start
+3. Health check at `/health` should turn green within 90 seconds of container start (Docker HEALTHCHECK start-period is 90s to cover parquet plus classifier load)
 
 ### 6c. Validation Test Suite
 
@@ -514,25 +521,34 @@ Run these curl commands against the deployed ML service URL:
 
 ```bash
 ML_URL="https://mplads-ml.onrender.com"
+API_KEY="<your MPLADS_API_KEY from the Render dashboard>"
 
-# 1. Health check
+# 1. Health check (public, no key needed)
 curl -s "$ML_URL/health" | python -m json.tool
 # Expected: {"status":"healthy","works_indexed":>0,"mps_indexed":>0,...}
 
 # 2. NLP categorization (live inference)
-curl -s -X POST "$ML_URL/nlp/categorize-work" \
+curl -s -X POST "$ML_URL/nlp/categorize-work" -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"description":"Construction of PCC road in village","declared_category":"Normal/Others"}' \
   | python -m json.tool
 # Expected: {"category_nlp":"Road & Pathway Infrastructure","confidence":>0.5,...}
 
 # 3. MP risk lookup
-curl -s "$ML_URL/score/mp-risk/RS_KARTIKEYA%20SHARMA" | python -m json.tool
+curl -s "$ML_URL/score/mp-risk/RS_KARTIKEYA%20SHARMA" -H "X-API-Key: $API_KEY" | python -m json.tool
 # Expected: {"mp_key":"RS_KARTIKEYA SHARMA","composite_risk_score":...}
 
 # 4. State risk aggregation
-curl -s "$ML_URL/score/state-risk/JHARKHAND" | python -m json.tool
+curl -s "$ML_URL/score/state-risk/JHARKHAND" -H "X-API-Key: $API_KEY" | python -m json.tool
 # Expected: {"state":"Jharkhand","mp_count":>0,...}
+
+# 5. Key rotation check — the leaked dev default MUST be rejected
+curl -s -o /dev/null -w "%{http_code}\n" "$ML_URL/dashboard/summary" -H "X-API-Key: mpladsAPI123"
+# Expected: 401 (if 200, the dashboard MPLADS_API_KEY was never rotated — fix immediately)
+
+# 6. Missing key rejected
+curl -s -o /dev/null -w "%{http_code}\n" "$ML_URL/dashboard/summary"
+# Expected: 401
 ```
 
 ### 6d. End-to-End Validation via Express Proxy
@@ -541,9 +557,10 @@ curl -s "$ML_URL/score/state-risk/JHARKHAND" | python -m json.tool
 BACKEND_URL="https://your-express-backend.onrender.com"
 TOKEN="<your-jwt-token>"
 
-# Proxied health check
+# Proxied health check (Express JWT required; ML /health itself is public)
 curl -s "$BACKEND_URL/api/analytics/health" \
   -H "Authorization: Bearer $TOKEN" | python -m json.tool
+# Expected: {"status":"healthy",...} relayed from FastAPI /health
 
 # Proxied NLP categorization
 curl -s -X POST "$BACKEND_URL/api/analytics/categorize-work" \
@@ -564,7 +581,7 @@ curl -s -X POST "$BACKEND_URL/api/analytics/categorize-work" \
 
 ### Recommended: Add a Startup Log Banner
 
-The existing `lifespan` function in [`main.py`](file:///C:/Users/anura/OneDrive/Desktop/MPLADS_Risk_Analysis/mplads_api/main.py) already logs startup/shutdown. The FeatureStore logs the count of indexed records. This is sufficient for monitoring.
+The existing `lifespan` function in [`main.py`](file:///C:/Users/anura/OneDrive/Desktop/MPLADS_Risk_Analysis/mplads_api/main.py) already logs startup/shutdown. The FeatureStore logs the count of indexed records. Additionally, `lifespan` now emits a `WARNING` at boot when the service runs outside `MPLADS_ENV=development` while still using the publicly-known dev-default API key — visible in Render's log streamer as a guardrail against the forgotten `sync: false` rotation. This is sufficient for monitoring.
 
 ### Optional: Express-Side Health Relay
 
@@ -584,7 +601,7 @@ This is the critical section for **handling future ML updates without downtime**
 1. Replace artifact files locally (e.g., new `feature7_mp_composite_risk.parquet`)
 2. Commit and push:
    ```bash
-   git add shared_preprocessing_artifacts/ feature1_artifacts/ feature2_artifacts/ feature3_artifacts/ feature5_artifacts/ feature7_artifacts/
+   git add feature1_artifacts/feature1_fact_work_disbursement_risk.parquet feature2_artifacts/feature2_fact_work_cost_risk.parquet feature5_artifacts/feature5_vendor_risk.parquet feature7_artifacts/feature7_mp_composite_risk.parquet shared_preprocessing_artifacts/fact_work_feature7.parquet feature3_artifacts/feature3_tfidf_lightgbm_classifier.joblib feature3_artifacts/feature3_taxonomy_config.json
    git commit -m "data: Re-score with September 2026 data refresh"
    git push origin main
    ```
@@ -606,7 +623,7 @@ This is the critical section for **handling future ML updates without downtime**
    from mplads_api.routers import duplicate
    app.include_router(duplicate.router)
    ```
-4. Add the corresponding proxy endpoint in Express's `mlController.js` and `mlRoutes.js`
+4. Add the corresponding proxy endpoint in Express's `mlController.js` and `mlRoutes.js` (forward `X-API-Key`; keep JWT plus INTERNAL_ROLES)
 5. Commit, push → auto-deploy
 
 ### Update Type 3: Model Retraining (scikit-learn version change)
@@ -679,7 +696,7 @@ To rollback on Render: go to the service dashboard → "Manual Deploy" → selec
 | **Total (with Free ML)** | | **$7/month** | | Cold starts on ML endpoints |
 
 > [!NOTE]
-> The free tier is viable for demo/staging environments. The Starter tier ($7/month) eliminates cold starts and is recommended for production. The Standard tier ($25/month, 1 GB RAM) would be needed if runtime artifact sizes grow past ~300 MB or you want 2+ workers.
+> The free tier is viable for demo/staging environments. The Starter tier ($7/month) eliminates cold starts and is recommended for production. The Standard tier ($25/month, 1 GB RAM) would be needed if in-memory indexes grow past ~300 MB or you want 2+ workers.
 
 ---
 
@@ -687,25 +704,25 @@ To rollback on Render: go to the service dashboard → "Manual Deploy" → selec
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| **OOM on Starter plan** | Low | Service crash | Monitor memory via Render metrics. Runtime artifacts total ~120 MB; Python overhead ~150 MB; total ~280 MB fits well in 512 MB. If OOM, upgrade to Standard plan. |
+| **OOM on Starter plan** | Low | Service crash | Monitor memory via Render metrics. Runtime payload is ~36 MB on disk; in-memory indexes are ~60-100 MB plus Python overhead, total well under 512 MB (startup log reports rss=...MB via psutil). If OOM, upgrade to Standard plan. |
 | **Cold start on free tier** | High (if free) | 30-60s latency on first request | Use Starter plan for production. Or add a cron job to ping `/health` every 10 minutes. |
-| **scikit-learn version mismatch** | Medium | Model load failure | `requirements.txt` pins `scikit-learn==1.6.1` exactly. Never change without re-exporting models. |
-| **Git repo too large** | Low | Slow clones | Current artifacts are ~187 MB in git (including training-only files). If they grow past 500 MB, switch to Git LFS for `.parquet` and `.joblib` files. |
-| **CORS issues** | Very Low | API errors | FastAPI has `allow_origins=["*"]` set. Express is the only caller, using server-side `fetch`. No browser CORS involved. |
-| **Secret exposure** | Low | Security breach | `MPLADS_API_KEY` is in Render's env vars (encrypted), not in code. The Docker image doesn't contain secrets. |
-| **Render service URL changes** | Very Low | Integration break | URL is stable once created. If renamed, update `FASTAPI_URL` in Express's env vars. |
+| **scikit-learn version mismatch** | Medium | Model load failure | `requirements.txt` is fully pinned (scikit-learn==1.6.1 plus all serving deps). Never change without re-exporting ALL joblibs and re-running tests. |
+| **Git repo too large** | Low | Slow clones | Current tracked artifacts are ~110 MB parquet plus ~31 MB joblib plus ~72 MB training-only npy/HDBSCAN in git (gitignored UMAP/transformer excluded). If they grow past 500 MB, switch to Git LFS for `.parquet` and `.joblib` files. |
+| **CORS issues** | Very Low | API errors | FastAPI currently sets `allow_origins=["*"]` with credentials (ML-5, skipped as non-severe). Express is the only caller via server-side fetch, so no browser CORS is involved. |
+| **Secret exposure** | Low | Security breach | `MPLADS_API_KEY` uses `sync: false` on both services (dashboard-set, encrypted); the Docker image contains no secret. Code default `mpladsAPI123` is dev-only. Prod auth is enforced (401/500) with an `MPLADS_ENV=development` escape hatch for local tests. |
+| **Render service URL changes** | Very Low | Integration break | URL is stable once created. If renamed, update `FASTAPI_URL` in Express's env vars. Deploy order: create `mplads-ml` first, then set `FASTAPI_URL` on Express and enable `FASTAPI_ENABLED=true`. |
 
 ---
 
 ## 15. Appendix — Complete File Contents
 
-### Files to Create
+### Files Created
 
-| File | Path | Action |
+| File | Path | Status |
 |---|---|---|
-| `Dockerfile` | `./Dockerfile` | **Create new** (contents in [Step 1](#5-step-1--create-the-dockerfile)) |
-| `.dockerignore` | `./.dockerignore` | **Create new** (contents in [Step 2](#6-step-2--create-dockerignore)) |
-| `render.yaml` | `./render.yaml` | **Replace existing** (contents in [Step 3](#7-step-3--update-renderyaml-blueprint)) |
+| `Dockerfile` | `./Dockerfile` | **Created** - selective COPY of 5 parquets (4 loaded at startup + 1 fallback) plus NLP classifier and taxonomy (contents in Step 1) |
+| `.dockerignore` | `./.dockerignore` | **Created** - excludes intermediates, unused audit joblibs, CSVs, PNGs (contents in Step 2) |
+| `render.yaml` | `./render.yaml` | **Replaced** - adds `mplads-ml` Docker service, no PORT override, `sync: false` API key (contents in Step 3) |
 
 ### Files That Require NO Changes
 
@@ -716,8 +733,8 @@ To rollback on Render: go to the service dashboard → "Manual Deploy" → selec
 | `mplads_api/core/feature_store.py` | Loads from relative paths that match Docker COPY layout |
 | `backend/src/controllers/mlController.js` | Proxy already built and tested |
 | `backend/src/routes/mlRoutes.js` | Routes already wired |
-| `backend/src/config/env.js` | Reads `FASTAPI_URL` from env vars |
-| `requirements.txt` | Already has all production deps pinned |
+| `backend/src/config/env.js` | Reads `FASTAPI_URL`, `FASTAPI_ENABLED`, and `MPLADS_API_KEY` from env vars |
+| `requirements.txt` | Fully pinned with == including `psutil==6.1.0` for RSS logging; Python 3.11 target |
 
 ### Docker Build & Test Commands (Local Verification)
 
@@ -726,10 +743,13 @@ To rollback on Render: go to the service dashboard → "Manual Deploy" → selec
 docker build -t mplads-ml:latest .
 
 # Run locally (maps to port 8000)
-docker run --rm -p 8000:8000 --name mplads-ml mplads-ml:latest
+docker run --rm -p 8000:8000 -e MPLADS_API_KEY=dev-local-key -e MPLADS_ENV=production --name mplads-ml mplads-ml:latest
 
-# Test health endpoint
+# Test health endpoint (public on ML service)
 curl http://localhost:8000/health
+
+# Test authed endpoint (401 without key, 200 with key)
+curl -H "X-API-Key: dev-local-key" http://localhost:8000/dashboard/summary | python -m json.tool
 
 # Check image size
 docker images mplads-ml:latest --format "{{.Size}}"
@@ -741,15 +761,18 @@ docker stats mplads-ml --no-stream --format "{{.MemUsage}}"
 ### Quick Summary: Three Commands to Deploy
 
 ```bash
-# 1. Create the files (Dockerfile, .dockerignore, updated render.yaml)
-#    → See sections 5, 6, 7 above for exact contents
+# 1. Files already exist — verify, then commit if untracked
+git status --short
+# Expected: Dockerfile, .dockerignore present; render.yaml modified
 
 # 2. Commit and push
-git add Dockerfile .dockerignore render.yaml
+git add Dockerfile .dockerignore render.yaml ML_Deployment.md
 git commit -m "deploy: Dockerize and deploy FastAPI ML service on Render"
 git push origin main
 
-# 3. Set FASTAPI_URL in Render dashboard for the Express backend
+# 3. Two-step wiring: deploy mplads-ml first, then set FASTAPI_URL
+#    on the Express service in the Render dashboard, keeping the
+#    same MPLADS_API_KEY (sync: false) on both services.
 #    → https://mplads-ml.onrender.com (URL assigned by Render after deploy)
 ```
 

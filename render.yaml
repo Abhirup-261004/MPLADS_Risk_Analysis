@@ -1,5 +1,5 @@
-# Render Blueprint for the Express API and React/Vite frontend.
-# Enter all `sync: false` values in Render when creating or syncing this Blueprint.
+# Render Blueprint - Express API, React-Vite Frontend, FastAPI ML Service
+# Enter all sync:false values in the Render dashboard when creating or syncing.
 services:
   - type: web
     name: MPLADS_Risk_Analysis
@@ -25,13 +25,12 @@ services:
         sync: false
       - key: SEED_ADMIN_ON_START
         value: "false"
-      # FastAPI can be enabled later without changing this Blueprint.
       - key: FASTAPI_ENABLED
-        value: "false"
-      # Must match MPLADS_API_KEY on the FastAPI ML service.
+        value: "true"
+      - key: FASTAPI_URL
+        sync: false
       - key: MPLADS_API_KEY
-        value: "mpladsAPI123"
-
+        sync: false
   - type: web
     name: MPLADS_Risk_Analysis-1
     runtime: static
@@ -41,4 +40,18 @@ services:
     autoDeployTrigger: commit
     envVars:
       - key: VITE_API_URL
+        sync: false
+  - type: web
+    name: mplads-ml
+    runtime: docker
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    plan: starter
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: MPLADS_API_KEY
         sync: false

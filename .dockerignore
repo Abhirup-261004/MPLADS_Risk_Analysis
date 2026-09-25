@@ -1,0 +1,63 @@
+# Node.js and frontend stay out of the ML image
+backend/
+frontend/
+node_modules/
+
+# Training-only model artifacts (stay in git, never enter the image)
+feature3_artifacts/feature3_umap.joblib
+feature3_artifacts/feature3_sentence_transformer/
+feature3_artifacts/description_embeddings.npy
+feature3_artifacts/feature3_hdbscan.joblib
+
+# Intermediate parquets not read by FeatureStore.load_all
+feature3_artifacts/feature3_fact_work_enriched.parquet
+feature3_artifacts/feature3_work_categories.parquet
+feature3_artifacts/feature3_category_mismatch_worklist.parquet
+feature5_artifacts/feature5_fact_work_vendor_risk.parquet
+shared_preprocessing_artifacts/fact_work.parquet
+shared_preprocessing_artifacts/fact_work_feature1.parquet
+shared_preprocessing_artifacts/fact_work_feature2.parquet
+shared_preprocessing_artifacts/fact_work_feature3.parquet
+shared_preprocessing_artifacts/fact_work_feature5.parquet
+shared_preprocessing_artifacts/fact_work_vendor.parquet
+shared_preprocessing_artifacts/fact_calamity.parquet
+shared_preprocessing_artifacts/fact_expenditure.parquet
+shared_preprocessing_artifacts/fact_expenditure_rollup.parquet
+shared_preprocessing_artifacts/fact_work_quarantine.parquet
+shared_preprocessing_artifacts/dim_mp.parquet
+shared_preprocessing_artifacts/state_wise_summary.parquet
+shared_preprocessing_artifacts/vendor_resolution_table.parquet
+
+# Unused audit models (kept in git, not loaded since ML-2 cleanup)
+feature1_artifacts/feature1_isolation_forest.joblib
+feature2_artifacts/feature2_lof_model.joblib
+feature5_artifacts/feature5_isolation_forest.joblib
+feature7_artifacts/feature7_isolation_forest.joblib
+feature7_artifacts/feature7_kmeans_model.joblib
+
+# Notebooks
+notebooks/
+
+# Git and docs
+.git/
+.gitignore
+.github/
+*.md
+render.yaml
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env and OS files
+.env
+.env.*
+.DS_Store
+Thumbs.db
+
+# CSVs (parquet is the serving format; gitignore already excludes *.csv)
+*.csv
+
+# Visualizations
+*.png

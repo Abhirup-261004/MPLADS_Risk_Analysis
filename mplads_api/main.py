@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,11 @@ logger = logging.getLogger("mplads_api")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up MPLADS Risk Analytics API...")
+    if os.getenv("MPLADS_ENV") != "development" and settings.API_KEY == "mpladsAPI123":
+        logger.warning(
+            "MPLADS_API_KEY is still the public dev default 'mpladsAPI123' "
+            "(present in git history). Set a strong random value in the Render dashboard."
+        )
     store = FeatureStore.get_instance()
     store.load_all()
     yield
