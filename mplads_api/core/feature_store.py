@@ -40,7 +40,6 @@ class FeatureStore:
     _instance = None
 
     def __init__(self):
-        self.mp_scorecard: Optional[pd.DataFrame] = None
         self.nlp_classifier: Optional[Any] = None
         self.nlp_taxonomy: Optional[Dict[str, Any]] = None
         
@@ -48,6 +47,7 @@ class FeatureStore:
         self.mp_index: Dict[str, Dict[str, Any]] = {}
         self.vendor_index: Dict[str, Dict[str, Any]] = {}
         self.state_index: Dict[str, Dict[str, Any]] = {}
+        self.mp_top20: List[Dict[str, Any]] = []
 
         self.name_to_keys_index: Dict[str, List[str]] = {}
         self.normalized_key_index: Dict[str, str] = {}
@@ -104,8 +104,8 @@ class FeatureStore:
         mp_path = settings.FEATURE7_ARTIFACT_DIR / "feature7_mp_composite_risk.parquet"
         if mp_path.exists():
             logger.info("Loading MP composite scorecard from %s", mp_path)
-            self.mp_scorecard = pd.read_parquet(mp_path)
-            for row in self.mp_scorecard.to_dict(orient="records"):
+            mp_df = pd.read_parquet(mp_path)
+            for row in mp_df.to_dict(orient="records"):
                 clean_dict = sanitize_record(row)
                 mp_k = str(clean_dict.get("mp_key", ""))
                 mp_name = str(clean_dict.get("mp_name_clean", ""))
@@ -126,7 +126,11 @@ class FeatureStore:
 
             logger.info("Indexed %d MP composite scorecards (%d clean names).", len(self.mp_index), len(self.name_to_keys_index))
 
-            state_groups = self.mp_scorecard.groupby("state")
+            sort_col = "ml_augmented_composite_risk_score" if "ml_augmented_composite_risk_score" in mp_df.columns else "composite_risk_score"
+            top20 = mp_df.sort_values(by=sort_col, ascending=False).head(20)
+            self.mp_top20 = [sanitize_record(r) for r in top20.to_dict(orient="records")]
+
+            state_groups = mp_df.groupby("state")
             for state_name, group in state_groups:
                 st_str = str(state_name).upper().strip()
                 record_dict = {
@@ -140,6 +144,9 @@ class FeatureStore:
                     "low_mp_count": int((group["ml_augmented_risk_tier"] == "Low").sum()) if "ml_augmented_risk_tier" in group else int((group["composite_risk_tier"] == "Low").sum()),
                 }
                 self.state_index[st_str] = sanitize_record(record_dict)
+
+            del mp_df
+            gc.collect()
         else:
             logger.error("Required parquet missing: %s", mp_path)
 

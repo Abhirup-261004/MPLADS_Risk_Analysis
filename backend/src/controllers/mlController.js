@@ -14,7 +14,13 @@ async function forwardToFastApi(targetUrl, options, res) {
 
   let response;
   try {
-    response = await fetch(targetUrl, options);
+    response = await fetch(targetUrl, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        'X-API-Key': env.fastApiApiKey,
+      },
+    });
   } catch (err) {
     return res.status(503).json({
       code: 'ANALYTICS_UNAVAILABLE',

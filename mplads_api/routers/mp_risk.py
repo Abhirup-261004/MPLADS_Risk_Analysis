@@ -9,14 +9,16 @@ router = APIRouter(prefix="/score", tags=["MP Composite Risk"], dependencies=[De
 
 def _resolve_mp_tier(record):
     quality = str(record.get("composite_data_quality_tier") or "")
-    score_raw = record.get("ml_augmented_composite_risk_score") or record.get("composite_risk_score")
+    ml_score = record.get("ml_augmented_composite_risk_score")
+    score_raw = ml_score if ml_score is not None else record.get("composite_risk_score")
     if quality == "Insufficient" or score_raw is None:
         s_f1 = record.get("s_f1")
         s_f2 = record.get("s_f2")
         s_f5 = record.get("s_f5")
         if s_f1 is None and s_f2 is None and s_f5 is None:
             return "Unknown / Insufficient Data", 0.0
-    tier_raw = record.get("ml_augmented_risk_tier") or record.get("composite_risk_tier")
+    ml_tier = record.get("ml_augmented_risk_tier")
+    tier_raw = ml_tier if ml_tier is not None else record.get("composite_risk_tier")
     return str(tier_raw) if tier_raw else "Unknown", float(score_raw) if score_raw is not None else 0.0
 
 @router.get("/mp-risk/{mp_identifier}", response_model=MPRiskResponse)

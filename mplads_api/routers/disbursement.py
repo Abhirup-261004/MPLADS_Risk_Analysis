@@ -25,8 +25,10 @@ def get_disbursement_risk(req: DisbursementRiskRequest):
     zscore = float(work_record.get("peer_shortfall_zscore") or 0.0)
     score_raw = work_record.get("disbursement_risk_score")
     risk_score = float(score_raw) if score_raw is not None else 0.0
-    coverage = str(work_record.get("coverage_flag") or "disbursement_known")
+    coverage = str(work_record.get("coverage_flag") or "disbursement_unknown")
     risk_tier = _resolve_disbursement_tier(score_raw, work_record.get("disbursement_risk_tier"), coverage)
+    if risk_tier == "Unknown":
+        risk_score = 0.0
     explanation = work_record.get("disbursement_risk_explanation")
 
     return DisbursementRiskResponse(

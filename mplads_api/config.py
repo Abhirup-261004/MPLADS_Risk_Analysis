@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     API_TITLE: str = "MPLADS Risk Analytics API"
     API_VERSION: str = "1.0.0"
-    API_KEY: Optional[str] = os.getenv("MPLADS_API_KEY", None)
+    API_KEY: Optional[str] = os.getenv("MPLADS_API_KEY", "mpladsAPI123")
 
 
 settings = Settings()

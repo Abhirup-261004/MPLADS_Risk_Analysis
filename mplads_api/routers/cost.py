@@ -26,6 +26,8 @@ def get_cost_anomaly(req: CostAnomalyRequest):
     score_raw = work_record.get("cost_risk_score")
     cost_score = float(score_raw) if score_raw is not None else 0.0
     risk_tier = _resolve_cost_tier(score_raw, work_record.get("cost_risk_tier"), peer_size)
+    if risk_tier == "Unknown":
+        cost_score = 0.0
     explanation = work_record.get("cost_risk_explanation")
 
     return CostAnomalyResponse(

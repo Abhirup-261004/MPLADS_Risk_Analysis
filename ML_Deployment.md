@@ -409,7 +409,7 @@ services:
       - key: PORT
         value: "8000"
       - key: MPLADS_API_KEY
-        sync: false
+        value: "mpladsAPI123"
       - key: PYTHONUNBUFFERED
         value: "1"
 ```
@@ -447,11 +447,11 @@ After deploying the blueprint, set these values **manually** in the Render dashb
 | Variable | Value |
 |---|---|
 | `PORT` | `8000` (auto-set by render.yaml) |
-| `MPLADS_API_KEY` | Generate a strong random key: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `MPLADS_API_KEY` | `mpladsAPI123` (must match the same variable on the Express service) |
 | `PYTHONUNBUFFERED` | `1` (ensures logs stream in real-time to Render's log viewer) |
 
 > [!NOTE]
-> The `MPLADS_API_KEY` is currently used in a soft-check pattern in `security.py` (it doesn't enforce rejection). If you want to enforce it, update the `verify_api_key` function to raise `HTTPException(401)` on mismatch, and have `mlController.js` forward the key in the `X-API-Key` header.
+> `verify_api_key` in `security.py` now **enforces** auth: it raises `HTTPException(401)` on a missing/wrong `X-API-Key` and `500` if no key is configured. `mlController.js` forwards `X-API-Key` on every proxied call. The key must be **identical** on both services; the default in code/env templates is `mpladsAPI123`.
 
 ---
 

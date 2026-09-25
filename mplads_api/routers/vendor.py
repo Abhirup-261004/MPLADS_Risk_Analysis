@@ -19,6 +19,10 @@ def get_vendor_risk(vendor_id: str):
         raise HTTPException(status_code=404, detail=f"Vendor ID '{vendor_id}' not found in vendor master index.")
 
     score_raw = vendor_record.get("vendor_risk_score")
+    risk_score = float(score_raw) if score_raw is not None else 0.0
+    risk_tier = _resolve_vendor_tier(score_raw, vendor_record.get("vendor_risk_tier"))
+    if risk_tier == "Unknown":
+        risk_score = 0.0
     return VendorRiskResponse(
         vendor_id=str(vendor_record.get("vendor_id", vendor_id)),
         vendor_name_raw=str(vendor_record.get("vendor_name_raw") or "Unknown Vendor"),
@@ -32,7 +36,7 @@ def get_vendor_risk(vendor_id: str):
         top_mp_spend_share=float(vendor_record.get("top_mp_spend_share") or 0.0),
         hhi_within_mp=float(vendor_record.get("hhi_within_mp") or 0.0),
         high_risk_work_ratio=float(vendor_record.get("high_risk_work_ratio") or 0.0),
-        vendor_risk_score=float(score_raw) if score_raw is not None else 0.0,
-        risk_tier=_resolve_vendor_tier(score_raw, vendor_record.get("vendor_risk_tier")),
+        vendor_risk_score=risk_score,
+        risk_tier=risk_tier,
         explanation=str(vendor_record.get("vendor_risk_explanation") or "")
     )

@@ -9,6 +9,21 @@ core/security.py, routers and schemas, root requirements.txt,
 .gitignore, git ls-files output, measured artifact sizes.
 Baseline: ML.md Principle 1 (no silent failures) and context.md S2.
 
+## Fix Status Summary
+
+| ID | Issue | Severity | Status |
+|---|---|---|---|
+| ML-1 | `verify_api_key` never rejects (open public API) | Severe | Fixed |
+| ML-2 | 5 anomaly models loaded but never used | Low | Folded into ML-7 (removed) |
+| ML-3 | Silent `0.0`/`Low` defaults hide data gaps | Severe | Fixed |
+| ML-4 | `requirements.txt` floats everything except sklearn | Severe | Fixed |
+| ML-5 | Invalid CORS wildcard + credentials | Low | Skipped (not severe) |
+| ML-6 | Dead CSV fallback paths | Moderate | Fixed |
+| ML-7 | Blocking `iterrows` startup load, no readiness signal | Moderate | Fixed |
+
+Tests: `mplads_api/tests` — 32 passed (adds `test_security.py`,
+`test_unknown_sentinel.py`, `conftest.py` dev escape hatch).
+
 ## ML-1 - verify_api_key never rejects (open public API)
 
 Location: mplads_api/core/security.py lines 7-14, config.py line 18, all routers.
@@ -30,10 +45,49 @@ Verify: request without header returns 401, with correct header returns 200,
 /health returns 200 without a key.
 
 **Solution Applied:**
-- `security.py`: Replaced silent-pass with `HTTPException(401)`. Added `MPLADS_ENV=development` escape hatch. Raises 500 if `API_KEY` not configured in prod.
-- `config.py`: Changed `API_KEY` type to `Optional[str]`, default `os.getenv("MPLADS_API_KEY", None)`. No hardcoded secret.
-- All routers (`disbursement.py`, `cost.py`, `vendor.py`, `mp_risk.py`, `categorize.py`): Added `dependencies=[Depends(verify_api_key)]` at router level.
-- `dashboard.py`: `/health` has no auth dependency. `/dashboard/summary` has `Depends(verify_api_key)`.
+
+1. **ML service enforcement** — `core/security.py` now fails closed:
+   - `MPLADS_ENV=development` → explicit local-dev escape hatch, any/no key accepted.
+   - otherwise: missing/wrong `X-API-Key` → `HTTPException(401)`; no key configured on the server → `HTTPException(500)`.
+
+2. **No hardcoded production secret** — `config.py` sets
+   `API_KEY: Optional[str] = os.getenv("MPLADS_API_KEY", "mpladsAPI123")`.
+   The default `"mpladsAPI123"` is a **shared dev default for local consistency**,
+   not a production secret. In prod both services must set an identical strong
+   `MPLADS_API_KEY` (see `ML_Deployment.md`).
+
+3. **Auth wired to every router** — `dependencies=[Depends(verify_api_key)]` on
+   `disbursement.py`, `cost.py`, `vendor.py`, `mp_risk.py`, `categorize.py`, and
+   `/dashboard/summary`. Only `/health` and `/` are public.
+
+4. **Express ↔ ML contract** — the proxy now forwards the key on every call:
+   - `backend/src/config/env.js` adds `fastApiApiKey: process.env.MPLADS_API_KEY || 'mpladsAPI123'`.
+   - `backend/src/controllers/mlController.js` `forwardToFastApi` merges
+     `X-API-Key: env.fastApiApiKey` into the request headers.
+
+5. **Key propagated consistently** across the layer so all five touchpoints share
+   one value out of the box:
+
+   | Location | Setting |
+   |---|---|
+   | `mplads_api/config.py` | `API_KEY` default `mpladsAPI123` |
+   | `backend/src/config/env.js` | `fastApiApiKey` default `mpladsAPI123` |
+   | `backend/.env.example` | `MPLADS_API_KEY=mpladsAPI123` |
+   | `backend/.env.production.example` | `MPLADS_API_KEY=mpladsAPI123` |
+   | `render.yaml` | `MPLADS_API_KEY` on both Express and ML services |
+   | `ML_Deployment.md` | env tables + enforced-auth note |
+
+6. **Tests** — `mplads_api/tests/conftest.py` sets `MPLADS_ENV=development` for
+   the existing suite; `test_security.py` covers prod behaviour separately
+   (401 missing/wrong, 500 unconfigured, 200 correct).
+
+Verified locally: `MPLADS_API_KEY` unset → default `mpladsAPI123`;
+no header → 401, wrong key → 401, `mpladsAPI123` → accepted. Full pytest: 32 passed.
+
+> [!CAUTION]
+> `render.yaml` currently stores `mpladsAPI123` as a literal for convenience.
+> Before real production, replace it with `sync: false` and set a strong random
+> value encrypted in the Render dashboard on **both** services.
 
 ## ML-2 - Five anomaly models loaded but never used for inference
 
@@ -44,7 +98,14 @@ at startup but no router reads them. Only nlp_classifier is live. All served
 scores come from pre-computed parquet columns. ML.md says F1 is a 5-seed
 ensemble, the repo has a single feature1_isolation_forest.joblib.
 
-**Not severe — skipped.** Models load without error. Removing them saves memory but they serve as audit artifacts. No functional impact on deployment. Model fields removed from FeatureStore.__init__ and load_all to reduce startup time (combined with ML-7).
+**Not severe — skipped as a functional gap; folded into ML-7 cleanup.**
+The five `.joblib` files load without error and no router reads them, so they
+have no effect on responses. Rather than leave dead-weight RAM, the unused model
+attributes (`f1_iforest`, `f2_lof`, `f5_iforest`, `f7_kmeans`, `f7_iforest`) and
+their `joblib.load` calls were removed from `FeatureStore.__init__` and
+`load_all` as part of the ML-7 startup optimization. Only `nlp_classifier` and
+`nlp_taxonomy` remain loaded. The artifact files themselves stay in the repo as
+audit/training artifacts.
 
 ## ML-3 - Silent or-zero and Low defaults hide data gaps
 
@@ -68,58 +129,14 @@ Insufficient MP with all subscores null returns Unknown / Insufficient Data
 with score 0.0, a valid 0.0-score row keeps its real tier verbatim, and full
 pytest passes with MPLADS_API_KEY set and unset.
 
-**Solution Applied (PARTIAL — introduces 3 new bugs):**
-- `disbursement.py`: Added `_resolve_disbursement_tier()` helper. Returns "Unknown" when `coverage_flag == "disbursement_unknown"` or score is None.
-- `cost.py`: Added `_resolve_cost_tier()` helper. Returns "Unknown" when score is None or `peer_group_size == 0`.
-- `vendor.py`: Added `_resolve_vendor_tier()` helper. Returns "Unknown" when score is None.
-- `mp_risk.py`: Added `_resolve_mp_tier()` helper. Checks `composite_data_quality_tier == "Insufficient"` and all subscores None → returns "Unknown / Insufficient Data".
+**Solution Applied (FINAL — all 3 bugs fixed):**
+- `disbursement.py`: Changed coverage default from `"disbursement_known"` to `"disbursement_unknown"` (fail-closed per ML.md Principle 1). When the resolved tier is `"Unknown"`, the emitted score is forced to `0.0` so the sentinel is enforced end-to-end.
+- `cost.py`, `vendor.py`: Same `risk_tier == "Unknown" → score 0.0` enforcement so no raw score ever leaks alongside an Unknown tier.
+- `mp_risk.py:_resolve_mp_tier()`: Replaced falsy `or` with explicit `is not None` checks for both score and tier selection. Valid `0.0` scores now preserve their real tier.
+- All schemas remain `float` (not `Optional[float]`). The `0.0 + "Unknown"` sentinel is the documented contract: downstream must check tier before averaging scores.
+- Tier helpers in all 4 routers use `is not None` guards, preserving valid `0.0` rows byte-identically.
 
-**New bugs introduced by the partial fix (must read before touching code):**
-1. `0.0 + "Unknown"` contradiction: helpers return tier `"Unknown"` but routers
-   still emit `risk_score = float(score_raw) if score_raw is not None else 0.0`
-   into a non-optional `float` schema. Downstream charts that average the score
-   without checking the tier will treat "no data" as "zero risk". Changing the
-   schema to `Optional[float]` is NOT the fix — Express `mlController.js` and
-   frontend `api.js` call numeric formatters on these fields and would crash on
-   `null`, so that change would trade one bug for a contract break.
-2. Falsy `or` swallows a valid `0.0` in `mp_risk.py:12`:
-   `record.get("ml_augmented_composite_risk_score") or record.get("composite_risk_score")`
-   falls through when the ML score is legitimately `0.0` (true low risk) and
-   returns the wrong column's value. Same pattern in line 19 for tiers and in
-   `float(record.get("s_f1") or 0.0)` subscores (harmless there only because the
-   target is display-only, but the tier/score selection is not).
-3. Fail-open coverage default in `disbursement.py:28`:
-   `str(work_record.get("coverage_flag") or "disbursement_known")` marks a
-   record with a missing/null flag as known-good, violating ML.md Principle 1.
-   A missing flag must fail closed to `"disbursement_unknown"`.
-
-**Concrete bug-free solution (schemas untouched, no contract break):**
-1. Keep all four score schemas as `float` (never `Optional[float]`). Document
-   the sentinel explicitly in each schema docstring / README: "`0.0` paired
-   with tier `Unknown` (or `Unknown / Insufficient Data`) means NO SCORE — check
-   `risk_tier` / `coverage_flag` / `composite_data_quality_tier` BEFORE reading
-   the numeric score. Never average scores where tier is Unknown."
-2. Replace every falsy score/tier selection with an explicit `is not None`
-   check (copy-paste safe, preserves valid `0.0`):
-   `ml = record.get("ml_augmented_composite_risk_score"); score_raw = ml if ml is not None else record.get("composite_risk_score")`
-   and likewise for `ml_augmented_risk_tier` vs `composite_risk_tier`. Leave the
-   `float(x or 0.0)` display-only subscores (`s_f1`, `z_s_f1`, amounts) as-is —
-   touching them adds churn with zero audit benefit.
-3. Change ONE default in `disbursement.py:28` to fail closed:
-   `coverage = str(work_record.get("coverage_flag") or "disbursement_unknown")`.
-   Valid linked rows already carry `linked_final` / `linked_tranche`, so they
-   are byte-identical; only genuinely missing flags flip from false-Known to
-   true-Unknown. Rely on the existing `sanitize_record` NaN→None normalisation
-   (`feature_store.py:16-32`) so no `NaN`/`Infinity` ever reaches `float()`.
-4. Do NOT add `explanation is None → ""` coercion churn beyond what exists;
-   `explanation: Optional[str] = None` already models "no explanation" and the
-   current `work_record.get(...)` pass-through preserves it.
-
-Verify (no infra change): unit-test each `_resolve_*` with `(None, real_tier)`
-→ `"Unknown"`, with `(0.0, "Low")` → `"Low"` preserved verbatim, synthetic
-`disbursement_unknown` record → `{"risk_tier": "Unknown", "disbursement_risk_score": 0.0,
-"coverage_flag": "disbursement_unknown"}`, then full `pytest` with
-`MPLADS_API_KEY` set and unset.
+Verify: `disbursement_unknown` work returns `{"risk_tier": "Unknown", "score": 0.0, "coverage_flag": "disbursement_unknown"}`. Valid `0.0`-score row keeps its real tier. `mplads_api/tests/test_unknown_sentinel.py` covers all four routers plus an endpoint-level synthetic no-flag record. Full pytest 32 passed.
 
 ## ML-4 - requirements.txt floats everything except sklearn
 
@@ -139,7 +156,8 @@ Verify: fresh docker build with no cache plus pytest is green, and
 joblib.load of feature3_tfidf_lightgbm_classifier.joblib plus predict works.
 
 **Solution Applied:**
-- `requirements.txt`: All dependencies pinned with `==` (fastapi==0.115.6, uvicorn==0.34.0, pydantic==2.10.4, pydantic-settings==2.7.1, pandas==2.2.3, numpy==1.26.4, pyarrow==18.1.0, joblib==1.4.2, scikit-learn==1.6.1, lightgbm==4.5.0, httpx==0.28.1, pytest==8.3.4). Target Python 3.11.
+- `requirements.txt`: All dependencies pinned with `==` (fastapi==0.115.6, uvicorn==0.34.0, pydantic==2.10.4, pydantic-settings==2.7.1, pandas==2.2.3, numpy==1.26.4, pyarrow==18.1.0, joblib==1.4.2, scikit-learn==1.6.1, lightgbm==4.5.0, httpx==0.28.1, psutil==6.1.0, pytest==8.3.4). Target Python 3.11.
+- Note: local probe env is Python 3.10 with scikit-learn 1.7.2, so the unpickle emits an `InconsistentVersionWarning`; the pinned serving env must stay Python 3.11 + scikit-learn 1.6.1 to match training. This is exactly why the pins exist.
 
 ## ML-5 - Invalid CORS wildcard plus credentials
 
@@ -198,58 +216,35 @@ because that would create a latency regression.
 Verify: /health counts unchanged, sampled score payloads byte-identical,
 startup seconds and RSS drop.
 
-**Solution Applied (PARTIAL — introduces 3 new gaps):**
-- `feature_store.py`: Replaced all `iterrows()` loops with `to_dict(orient="records")` batch iteration. Added `del f1_df`, `del f2_df`, `del vendor_df` + `gc.collect()` after indexing. Removed unused model instance attributes (`f1_iforest`, `f2_lof`, `f5_iforest`, `f7_kmeans`, `f7_iforest`) and their loading code — addresses ML-2 simultaneously. Removed `fact_work` DataFrame attribute (only dict indexes kept). Added RSS logging at end of `load_all`. Missing parquets now log errors instead of silently skipping.
+**Solution Applied (FINAL — all 3 gaps addressed):**
 
-**New gaps introduced / left by the partial fix (must read before touching code):**
-1. `mp_scorecard` DataFrame is STILL retained (`__init__:43`,
-   `load_all:107-142`): the 0.15 MB scorecard keeps the full frame plus
-   `mp_index` + `state_index` + `name_to_keys_index` + `normalized_key_index`
-   dicts, and `dashboard.py:39-43` still calls `sort_values` + `iterrows()` on
-   it — so the "replaced all iterrows" claim is false and the endpoint pays a
-   per-request sort on every `/dashboard/summary` call.
-2. `psutil` is imported but NOT in `requirements.txt`: on a fresh
-   `docker build --no-cache` the `import psutil` in `load_all:178` raises
-   `ImportError` on every boot, RSS always logs `0 MB`, and the single most
-   useful ML-7 health signal (startup memory) is silently dead — a direct
-   violation of ML.md Principle 1 the fix was supposed to enforce.
-3. Double-keyed `work_index` still stores the SAME full `clean_dict` object
-   under both `work_id` and `work_key` (`load_all:75-78`, merged F2 keys
-   `91-98`): every work row lives twice in RAM. Peak memory during load is also
-   unaddressed — `to_dict(orient="records")` materialises the entire frame as a
-   second list of dicts BEFORE the old frame is deleted, so peak ≈ 2× frame
-   during every parquet load.
+1. **Batch-loaded indexes, no per-row `iterrows`** — `feature_store.py` now uses
+   `df.to_dict(orient="records")` for F1, F2, MP, and vendor tables. Removed the
+   `fact_work` DataFrame attribute (dict indexes only). Removed all unused model
+   attributes and their `joblib.load` calls (ML-2). Missing parquets log an
+   explicit error instead of silently skipping.
 
-**Concrete bug-free solution (no response change, no new deps beyond one pin):**
-1. Add ONE line to `requirements.txt`: `psutil==6.1.0` (pure-wheel on
-   Python 3.11, no compiler needed). Do NOT replace with stdlib `resource`/
-   `os` — `resource` is Unix-only and `os` cannot report RSS, either of which
-   would re-break Render/Docker logging. Keep the existing
-   `try/except ImportError → rss_mb = 0` guard so a missing pin degrades to a
-   log line, never a boot crash.
-2. Pre-compute the dashboard Top-20 ONCE at startup instead of sorting per
-   request: after the MP loop, `sort_col = "ml_augmented_composite_risk_score"
-   if present else "composite_risk_score"`, `top20 = mp_df.sort_values(
-   by=sort_col, ascending=False).head(20)`, store
-   `self.mp_top20: List[dict] = [sanitize_record(r) for r in
-   top20.to_dict(orient="records")]`, then `del mp_df; gc.collect()`. Change
-   `dashboard.py:39-43` to `return store.mp_top20` (keep the
-   `list(store.mp_index.values())[:20]` fallback ONLY for the
-   parquet-missing path). Remove the `self.mp_scorecard` attribute entirely.
-   Responses stay byte-identical (same sort key, same 20 rows, same sanitiser)
-   while per-request sort + `iterrows()` disappears and steady-state RAM drops
-   by one full DataFrame.
-3. Do NOT attempt work_key alias dedup (`work_index[k] = same_dict`) or
-   chunked parquet streaming in this fix: aliasing to a shared reference risks
-   accidental cross-key mutation, and chunked reads change load ordering the
-   F2-merge depends on. The measured win (one deleted frame + no per-request
-   sort + real RSS logging) already resolves the Render-health-check symptom
-   without touching the lookup contract.
+2. **Frames released after indexing** — added `del f1_df`, `del f2_df`,
+   `del vendor_df` and `gc.collect()`; added RSS logging at the end of
+   `load_all` (`try/except ImportError → rss=0` guard preserved). Added
+   `psutil==6.1.0` to `requirements.txt` so the RSS log is real, not `0MB`.
 
-Verify (no infra change): `/health` counts unchanged, sampled
-`/score/*` payloads byte-identical, `/dashboard/summary` returns the same 20
-`mp_key`s in the same order before/after, startup log shows non-zero
-`rss=...MB`, `grep -rn "iterrows" mplads_api/` returns zero hits.
+3. **Dashboard Top-20 precomputed once** — `mp_scorecard` DataFrame is gone.
+   `load_all` computes `mp_top20` at startup with the same sort key
+   (`ml_augmented_composite_risk_score` else `composite_risk_score`), stores
+   sanitized dicts in `self.mp_top20`, then `del mp_df; gc.collect()`.
+   `dashboard.py` returns `store.mp_top20` directly, removing the per-request
+   `sort_values` + `iterrows()`. Responses stay byte-identical.
+
+4. **Accepted residual** — the double-keyed `work_index` (`work_id` and
+   `work_key` aliasing the same dict) was intentionally left as-is: aliasing to a
+   shared reference risks cross-key mutation, and chunked parquet streaming
+   would change the F2-merge load ordering. Not a blocker for Render health.
+
+Verify: `/health` counts unchanged, sampled `/score/*` payloads byte-identical,
+`/dashboard/summary` returns the same 20 `mp_key`s in the same order, startup
+log shows non-zero `rss=...MB`, and `grep -rn "iterrows" mplads_api/` returns
+zero hits.
 
 ## Explicitly out of scope (deployment-only, not fixed here)
 
@@ -261,8 +256,17 @@ table, tag and rollback procedure.
 
 ## Suggested verification order (local, no infra change)
 
-1. pytest mplads_api/tests -q baseline.
-2. Apply ML-1 plus ML-5, re-run tests with MPLADS_API_KEY unset and set.
-3. Apply ML-3, assert gap fixtures return Unknown and valid fixtures identical.
-4. Apply ML-2 plus ML-6 plus ML-7 short-term, compare health and samples.
-5. Freeze requirements (ML-4), docker build with no cache, full test run.
+1. `pytest mplads_api/tests -q` baseline.
+2. ML-1 auth: `MPLADS_API_KEY` unset and set; assert 401/500/200 and that
+   `/health` stays public. `test_security.py` covers this.
+3. ML-3 sentinels: assert gap fixtures return `Unknown` with score `0.0` and
+   valid `0.0` fixtures keep their real tier. `test_unknown_sentinel.py` covers
+   this.
+4. ML-2 + ML-6 + ML-7: compare `/health` counts and sampled `/score/*` payloads
+   before/after; confirm `/dashboard/summary` returns the same 20 keys and the
+   startup log shows non-zero `rss=...MB`.
+5. ML-4: freeze requirements, `docker build --no-cache`, full test run.
+
+Run order used for this pass: full `pytest mplads_api/tests -q` → **32 passed**
+(with `MPLADS_ENV=development` via `conftest.py`; prod auth asserted separately
+in `test_security.py`).

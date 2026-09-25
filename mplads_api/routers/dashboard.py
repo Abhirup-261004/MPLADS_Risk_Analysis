@@ -36,9 +36,6 @@ def get_dashboard_summary(level: str = Query("mp", enum=["mp", "state"]), id: Op
                 return store.mp_index[id]
             raise HTTPException(status_code=404, detail=f"MP Key '{id}' not found in scorecard index.")
 
-        if store.mp_scorecard is not None and not store.mp_scorecard.empty:
-            sort_col = "ml_augmented_composite_risk_score" if "ml_augmented_composite_risk_score" in store.mp_scorecard.columns else "composite_risk_score"
-            sorted_mps = store.mp_scorecard.sort_values(by=sort_col, ascending=False).head(20)
-            from mplads_api.core.feature_store import sanitize_record
-            return [sanitize_record(row.to_dict()) for _, row in sorted_mps.iterrows()]
+        if store.mp_top20:
+            return store.mp_top20
         return list(store.mp_index.values())[:20]

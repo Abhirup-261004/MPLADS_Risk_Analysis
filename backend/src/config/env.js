@@ -25,6 +25,7 @@ export const env = {
   clientUrls,
   fastApiEnabled,
   fastApiUrl: process.env.FASTAPI_URL || (fastApiEnabled ? 'http://localhost:8000' : null),
+  fastApiApiKey: process.env.MPLADS_API_KEY || 'mpladsAPI123',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   jwtSecret: process.env.JWT_SECRET,
   mongoUri: process.env.MONGODB_URI,
