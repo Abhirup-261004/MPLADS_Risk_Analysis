@@ -1,0 +1,41 @@
+# Render Blueprint for the Express API and React/Vite frontend.
+# Enter all `sync: false` values in Render when creating or syncing this Blueprint.
+services:
+  - type: web
+    name: MPLADS_Risk_Analysis
+    runtime: node
+    region: singapore
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: "production"
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: "7d"
+      - key: CLIENT_URL
+        sync: false
+      - key: SEED_ADMIN_ON_START
+        value: "false"
+      # FastAPI can be enabled later without changing this Blueprint.
+      - key: FASTAPI_ENABLED
+        value: "false"
+
+  - type: web
+    name: MPLADS_Risk_Analysis-1
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    autoDeployTrigger: commit
+    envVars:
+      - key: VITE_API_URL
+        sync: false
