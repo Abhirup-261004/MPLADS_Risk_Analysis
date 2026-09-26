@@ -20,4 +20,5 @@ feature3_artifacts/feature3_sentence_transformer/
 
 # Exclude redundant large CSVs (Parquet files used in production)
 *.csv
-
+*.pem
+*.tar.gz
