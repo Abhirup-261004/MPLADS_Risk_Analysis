@@ -1,183 +1,256 @@
-# ML Layer Deployment Plan — Dockerized FastAPI on Render
+# ML Layer Deployment Plan --- Dockerized FastAPI on AWS EC2
 
-**Project:** MPLADS Risk Analytics — Problem Statement 26102  
-**Author:** ML Ops Engineer  
-**Date:** 2026-09-25 (updated 2026-09-26)  
-**Status:** Updated 2026-09-26 (rev 2) - aligned with ML-1 through ML-7 fixes; Dockerfile and render.yaml exist in repo root; doc/code drift from final review (D1-D4) resolved: `.dockerignore` block now matches the real file, parquet load wording corrected to 4-at-startup (5 baked), `MPLADS_ENV` marked optional, dev-default API key rotation warning added + startup WARNING log in `main.py`
+**Project:** MPLADS Risk Analytics --- Problem Statement 26102\
+**Author:** ML Ops Engineer\
+**Date:** 2026-09-26\
+**Status:** Deployment target revised after local Docker validation.
+Docker packaging is validated; Render deployment is blocked by measured
+runtime memory usage. AWS EC2 is now the selected ML hosting target.
 
----
+------------------------------------------------------------------------
 
 ## Table of Contents
 
-1. [Situation Assessment](#1-situation-assessment)
-2. [Architecture Decision — Why Docker is Required](#2-architecture-decision--why-docker-is-required)
-3. [Target Deployment Architecture](#3-target-deployment-architecture)
-4. [Pre-Deployment Checklist](#4-pre-deployment-checklist)
-5. [Step 1 — Verify the Dockerfile](#5-step-1--verify-the-dockerfile)
-6. [Step 2 — Verify .dockerignore](#6-step-2--verify-dockerignore)
-7. [Step 3 — Verify render.yaml Blueprint](#7-step-3--verify-renderyaml-blueprint)
-8. [Step 4 — Configure Environment Variables on Render](#8-step-4--configure-environment-variables-on-render)
-9. [Step 5 — Configure the Node.js Backend to Connect](#9-step-5--configure-the-nodejs-backend-to-connect)
-10. [Step 6 — Deploy & Validate](#10-step-6--deploy--validate)
-11. [Step 7 — Health Monitoring & Alerting](#11-step-7--health-monitoring--alerting)
-12. [Seamless Future Update Strategy](#12-seamless-future-update-strategy)
-13. [Cost Estimation](#13-cost-estimation)
-14. [Risk Register & Mitigations](#14-risk-register--mitigations)
-15. [Appendix — Complete File Contents](#15-appendix--complete-file-contents)
+1.  [Situation Assessment](#1-situation-assessment)
+2.  [Architecture Decision](#2-architecture-decision)
+3.  [Target Deployment Architecture](#3-target-deployment-architecture)
+4.  [Pre-Deployment Checklist](#4-pre-deployment-checklist)
+5.  [Step 1 --- Verify the Dockerfile](#5-step-1--verify-the-dockerfile)
+6.  [Step 2 --- Verify .dockerignore](#6-step-2--verify-dockerignore)
+7.  [Step 3 --- Local Docker Build &
+    Validation](#7-step-3--local-docker-build--validation)
+8.  [Step 4 --- Render Memory Blocker and Deployment
+    Decision](#8-step-4--render-memory-blocker-and-deployment-decision)
+9.  [Step 5 --- AWS EC2 Deployment
+    Requirements](#9-step-5--aws-ec2-deployment-requirements)
+10. [Step 6 --- Backend Integration
+    Requirements](#10-step-6--backend-integration-requirements)
+11. [Step 7 --- Production Validation
+    Requirements](#11-step-7--production-validation-requirements)
+12. [Future Update and Operations
+    Strategy](#12-future-update-and-operations-strategy)
+13. [Cost / Free-Plan Constraint](#13-cost--free-plan-constraint)
+14. [Risk Register](#14-risk-register)
+15. [Appendix --- Local Docker Test
+    Commands](#15-appendix--local-docker-test-commands)
 
----
+------------------------------------------------------------------------
 
 ## 1. Situation Assessment
 
-### What Exists Today
+### Current system
 
-| Component | Status | Location on Render |
-|---|---|---|
-| **React/Vite Frontend** | ✅ Deployed | Static site (`MPLADS_Risk_Analysis-1`) |
-| **Express.js Backend** | ✅ Deployed | Node web service (`MPLADS_Risk_Analysis`), Singapore region |
-| **FastAPI ML Service** | ❌ Not deployed | Exists as `mplads_api/` in the repo, fully functional locally |
+  ----------------------------------------------------------------------------
+  Component               Status                  Hosting
+  ----------------------- ----------------------- ----------------------------
+  React/Vite Frontend     Deployed                Render Static Site
+                                                  (`MPLADS_Risk_Analysis-1`)
 
-### What the ML Service Does
+  Express.js Backend      Deployed                Render Node Web Service
+                                                  (`MPLADS_Risk_Analysis`)
 
-The FastAPI app (`mplads_api/`) serves **pre-computed risk scores** and a **live NLP classifier** to the frontend via the Express backend proxy:
+  FastAPI ML Service      Docker image built and  **Target changed from Render
+                          validated locally; not  to AWS EC2**
+                          yet cloud-deployed      
+  ----------------------------------------------------------------------------
 
-| Endpoint | Function | Model/Data |
-|---|---|---|
-| `POST /nlp/categorize-work` | Live NLP work categorization | TF-IDF + LightGBM classifier (5.84 MB) |
-| `POST /score/disbursement-risk` | Work-level disbursement risk lookup | Pre-scored Parquet (9.48 MB) |
-| `POST /score/cost-anomaly` | Work-level cost anomaly lookup | Pre-scored Parquet (9.75 MB) |
-| `GET /score/vendor-risk/{id}` | Vendor risk lookup | Pre-scored Parquet (0.76 MB) |
-| `GET /score/mp-risk/{id}` | MP composite risk scorecard | Pre-scored Parquet (0.15 MB) |
-| `GET /score/state-risk/{state}` | State aggregated risk | Computed from MP scorecard |
-| `GET /dashboard/summary` | Top-N dashboard + summary stats | In-memory indexes |
-| `GET /health` | Service health probe | — |
+The Express backend already contains the reverse-proxy integration for
+the ML API. It reads `FASTAPI_URL`, forwards `X-API-Key`, and supports
+`FASTAPI_ENABLED`. No frontend-to-ML direct connection is required.
 
-### How the Backend Already Integrates
+### Runtime service
 
-The Express backend has a **fully-built reverse proxy** layer:
+The FastAPI application continues to serve:
 
-- **Route:** `app.use('/api/analytics', analyticsRouter)` in [`app.js`](file:///C:/Users/anura/OneDrive/Desktop/MPLADS_Risk_Analysis/backend/src/app.js)
-- **Proxy:** [`mlController.js`](file:///C:/Users/anura/OneDrive/Desktop/MPLADS_Risk_Analysis/backend/src/controllers/mlController.js) uses native `fetch()` to forward requests to `FASTAPI_URL`
-- **Auth gate:** All `/api/analytics/*` routes require JWT auth + `INTERNAL_ROLES` authorization
-- **Graceful fallback:** If `FASTAPI_ENABLED=false`, returns HTTP 503 with a meaningful message
+  Endpoint                          Purpose
+  --------------------------------- ------------------------------
+  `POST /nlp/categorize-work`       Live NLP work categorization
+  `POST /score/disbursement-risk`   Disbursement risk lookup
+  `POST /score/cost-anomaly`        Cost anomaly lookup
+  `GET /score/vendor-risk/{id}`     Vendor risk lookup
+  `GET /score/mp-risk/{id}`         MP composite risk
+  `GET /score/state-risk/{state}`   State aggregate risk
+  `GET /dashboard/summary`          Dashboard summary
+  `GET /health`                     Health probe
 
-> [!IMPORTANT]
-> The integration code is complete. The **only missing piece** is deploying the FastAPI service and setting `FASTAPI_URL` + `FASTAPI_ENABLED=true` on the Express backend.
+------------------------------------------------------------------------
 
-### Artifact Size Budget
+## 2. Architecture Decision
 
-| Category | Size | In Git? | Needed at Serving Time? |
-|---|---|---|---|
-| Parquet data files copied into the image (4 loaded at startup + 1 fallback: F1 9.48 + F2 9.75 + F5 vendor 0.76 + F7 MP 0.15 = ~20 MB loaded; F7 fallback `fact_work_feature7.parquet` 10.04 = ~30 MB total) | ~30 MB | ✅ Yes | ✅ Yes (4 loaded; fallback read only if F1 missing) |
-| Parquet data files NOT loaded (shared intermediates, F3/F5 intermediates, incl. 56 MB embeddings-adjacent npy counted below) | ~70 MB | ✅ Yes | ❌ No |
-| Anomaly audit models — 5 Joblib files (F1 3.65 + F2 3.82 + F5 0.89 + F7 iforest 1.30 + F7 kmeans 0.01) | ~10 MB | ✅ Yes | ❌ No - removed from FeatureStore startup in ML-2/ML-7 cleanup; kept in git only |
-| NLP classifier (`feature3_tfidf_lightgbm_classifier.joblib`) | ~6 MB | ✅ Yes | ✅ Yes |
-| Taxonomy config (`feature3_taxonomy_config.json`) | <0.1 MB | ✅ Yes | ✅ Yes |
-| HDBSCAN model (`feature3_hdbscan.joblib`) — training only | ~16 MB | ✅ Yes | ❌ No |
-| Embeddings (`description_embeddings.npy`) — training only | ~56 MB | ✅ Yes | ❌ No |
-| UMAP reducer (`feature3_umap.joblib`) | ~235 MB | ❌ Gitignored | ❌ No |
-| Sentence Transformer weights | ~400 MB | ❌ Gitignored | ❌ No |
+### Docker remains the packaging/runtime standard
 
-> [!NOTE]
-> The gitignored files (`feature3_umap.joblib` and `feature3_sentence_transformer/`) are **not needed at serving time**. Additionally, `description_embeddings.npy` (56 MB) and `feature3_hdbscan.joblib` (16 MB) are in git but also **not needed** — the Dockerfile selective COPY plus `.dockerignore` excludes them from the image. The production classifier is the lightweight TF-IDF+LightGBM pipeline (6 MB).
+The decision to use Docker is unchanged. The image uses Python 3.11,
+pinned Python dependencies, `libgomp1` for LightGBM, a non-root runtime
+user, selective artifact copying, and one Uvicorn worker.
 
-**Runtime image payload: ~36 MB of data/models (30 MB parquet + 6 MB NLP classifier + taxonomy) copied selectively; ~10 MB of unused audit joblibs stay in git but are excluded from the image → Docker image is ~400-550 MB total** (base image + Python deps + runtime artifacts).
+### Hosting decision changed after real measurement
 
----
+The original plan targeted a Render Docker Web Service. Local
+production-equivalent testing showed that the application requires
+substantially more memory than the original estimate.
 
-## 2. Architecture Decision — Why Docker is Required
+**Observed local results:**
 
-| Option | Verdict | Reason |
-|---|---|---|
-| **Render Native Python** | ❌ Rejected | Render's native Python runtime uses `pip install` on a minimal environment. scikit-learn 1.6.1 has strict C-extension build requirements. LightGBM requires `libgomp`. Native builds are fragile and slow (~8 min). |
-| **Docker on Render** | ✅ Selected | Full control over OS-level deps (`libgomp1` for LightGBM), deterministic builds, pinned scikit-learn version matches training environment exactly, and Render natively supports Docker web services. |
+-   Docker image built successfully:
+    `docker build -t mplads-ml:latest .`
+-   FastAPI startup completed successfully.
+-   FeatureStore indexed **86,300 work records**, **774 MP scorecards**,
+    and **9,170 vendor risk records**.
+-   NLP TF-IDF + LightGBM classifier loaded successfully.
+-   Startup application log reported approximately **826 MB RSS** during
+    loading.
+-   Steady Docker measurement:
+    -   `docker stats mplads-ml --no-stream`
+    -   **710.3 MiB / 3.71 GiB**
+-   `/health` returned HTTP 200.
+-   Authenticated `/dashboard/summary` returned valid JSON when
+    `X-API-Key: dev-local-key` was supplied.
+-   Requests without the correct API key returned HTTP 401 as intended.
 
-> [!CAUTION]
-> The model artifacts were trained with **scikit-learn==1.6.1**. Loading `.joblib` files with a different scikit-learn version will raise `ModuleNotFoundError` or produce silent wrong results. Docker pins all serving deps exactly (see fully pinned `requirements.txt`; Python 3.11 target).
+### Render blocker
 
----
+The intended Render Free service provides **512 MB RAM**. The measured
+steady-state container usage is approximately **710 MiB**, already above
+that limit before allowing for future model/data growth or transient
+memory spikes.
+
+Therefore:
+
+> **Do not deploy the ML Docker service to Render Free. Do not modify
+> the ML code merely to fit the Render Free memory ceiling.**
+
+The frontend and Express backend remain on Render. Only the ML Docker
+service moves to AWS EC2.
+
+------------------------------------------------------------------------
 
 ## 3. Target Deployment Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        RENDER PLATFORM                          │
-│                                                                 │
-│  ┌──────────────────────┐     ┌────────────────────────────┐   │
-│  │  Static Site          │     │  Node Web Service           │   │
-│  │  (React/Vite)         │────▶│  (Express Backend)          │   │
-│  │  MPLADS_Risk_         │     │  MPLADS_Risk_Analysis       │   │
-│  │  Analysis-1           │     │                             │   │
-│  │  Port: N/A (CDN)      │     │  FASTAPI_ENABLED=true       │   │
-│  └──────────────────────┘     │  FASTAPI_URL=https://       │   │
-│                                │    mplads-ml.onrender.com   │   │
-│                                │                             │   │
-│                                │  /api/analytics/* ──proxy──▶│   │
-│                                └──────────────┬─────────────┘   │
-│                                               │                  │
-│                                               │ HTTP (internal)  │
-│                                               ▼                  │
-│                                ┌────────────────────────────┐   │
-│                                │  Docker Web Service         │   │
-│                                │  (FastAPI ML Service)       │   │
-│                                │  mplads-ml                  │   │
-│                                │                             │   │
-│                                │  Port: 8000                 │   │
-│                                │  Health: /health            │   │
-│                                │                             │   │
-│                                │  Baked into image:            │   │
-│                                │  • 5 Parquet fact tables      │   │
-│                                │    (F1 + F2 + F5 vendor +     │   │
-│                                │     F7 MP + F7 fallback)      │   │
-│                                │    4 loaded at startup;       │   │
-│                                │    fallback only if F1 absent │   │
-│                                │  • 1 Joblib model (NLP clf)   │   │
-│                                │  • 1 JSON taxonomy config     │   │
-│                                │  • In-memory indexes          │   │
-│                                └────────────────────────────┘   │
-│                                          Singapore Region        │
-└─────────────────────────────────────────────────────────────────┘
+``` text
+┌───────────────────────────────────────────────────────────────┐
+│                         RENDER                                │
+│                                                               │
+│  React/Vite Static Site                                      │
+│          │                                                    │
+│          ▼                                                    │
+│  Express Backend                                              │
+│  MPLADS_Risk_Analysis                                        │
+│  FASTAPI_ENABLED=true                                        │
+│  FASTAPI_URL=<AWS ML API HTTPS URL>                           │
+│  MPLADS_API_KEY=<production secret>                           │
+└──────────┬────────────────────────────────────────────────────┘
+           │ HTTPS
+           │ X-API-Key
+           ▼
+┌───────────────────────────────────────────────────────────────┐
+│                     AWS EC2                                   │
+│                                                               │
+│  Selected instance: c7i-flex.large                            │
+│  Architecture: x86-64                                        │
+│  vCPU: 2                                                     │
+│  Memory: 4 GiB                                               │
+│                                                               │
+│  Docker Engine                                               │
+│       └── mplads-ml container                                 │
+│             └── FastAPI / Uvicorn                             │
+│                 Port 8000 internally                          │
+│                 Health endpoint: /health                      │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-### Key Design Decisions
+### Selected EC2 instance
 
-1. **Same region (Singapore)** — minimizes inter-service latency between Express ↔ FastAPI
-2. **Public URL but proxied access** — Render gives `mplads-ml` a public URL, but the frontend never calls it directly; all browser traffic flows through Express `/api/analytics/*` (JWT plus INTERNAL_ROLES, X-API-Key forwarded). Direct calls without `X-API-Key` return 401 by design.
-3. **Startup loading pattern** — 4 Parquet fact tables (F1 work risk, F2 cost risk, F5 vendor, F7 MP) plus the NLP classifier and taxonomy are loaded once during the `lifespan` startup event into dict indexes (frames released via del plus gc.collect; top-20 MPs precomputed). `shared_preprocessing_artifacts/fact_work_feature7.parquet` is baked into the image as a fallback that is read only when the F1 parquet is absent. Subsequent requests are pure dict lookups (sub-millisecond).
+**Instance type: `c7i-flex.large`**
 
----
+AWS currently lists `c7i-flex.large` as Free Tier eligible for eligible
+newer AWS accounts. The instance provides **2 vCPU and 4 GiB memory** on
+x86 architecture.
+
+Reasons for selecting it:
+
+1.  **Memory headroom:** current container steady usage is \~710 MiB; 4
+    GiB leaves substantial room for the OS, Docker, startup spikes,
+    larger Parquet indexes, and future model/data updates.
+2.  **x86 compatibility:** matches the current Docker development/build
+    architecture and avoids introducing ARM compatibility work.
+3.  **Future growth:** preferable to a 2 GiB instance for this project
+    because future ML artifacts and indexes are expected to increase.
+4.  **Current account eligibility:** AWS console shows this instance as
+    Free Tier eligible for the account.
+
+### AWS account constraint
+
+At the time of this revision, the AWS account reports:
+
+-   **Account plan:** Free Plan
+-   **Credits remaining:** **\$68.38 USD**
+-   **Free Plan time remaining:** **126 days**
+-   AWS account message: the Free Plan account does not get charged;
+    credits cover Free Plan costs, and free access ends when the Free
+    Plan expires or credits are depleted.
+
+This is **not a permanently free EC2 deployment**. The instance consumes
+the account's promotional credits. The engineer must design the
+deployment so the account remains on the AWS **Free Plan** and must not
+assume continued hosting after the remaining credits/time expire.
+
+------------------------------------------------------------------------
 
 ## 4. Pre-Deployment Checklist
 
-- [ ] Verify `Dockerfile`, `.dockerignore`, `render.yaml`, `requirements.txt`, and the 7 runtime artifacts (5 parquets — 4 loaded at startup plus the F1 fallback — plus NLP classifier plus taxonomy) are committed or staged (Dockerfile plus .dockerignore may still be untracked locally — run `git status --short` and `git add` them per §10a)
-- [ ] Confirm `requirements.txt` is fully pinned with == (fastapi, uvicorn, pydantic, pandas, numpy, pyarrow, joblib, scikit-learn==1.6.1, lightgbm, httpx, psutil, pytest) and targets Python 3.11
-- [ ] Confirm `.gitignore` excludes `*.csv` plus ONLY training-time artifacts (`feature3_umap.joblib`, `feature3_sentence_transformer/`); shared CSVs stay untracked by design since serving uses parquet
-- [ ] Ensure the repo is pushed to the Git provider connected to Render (GitHub/GitLab)
-- [ ] Have Render dashboard access with permission to create new services
+### Docker/application --- already validated
 
-### Verify Artifacts Are Tracked
+-   [x] Docker Engine works locally.
+-   [x] Required runtime artifacts exist.
+-   [x] Docker image builds successfully.
+-   [x] FastAPI container starts successfully.
+-   [x] `/health` returns HTTP 200.
+-   [x] API-key authentication works.
+-   [x] `/dashboard/summary` returns valid JSON with the correct key.
+-   [x] Actual memory usage measured: \~710 MiB steady, \~826 MB RSS
+    reported during startup.
 
-Run this locally to confirm all required files are tracked by git:
+### AWS work still required
 
-```bash
-# All these should return the filename (tracked), not empty (untracked)
-git ls-files Dockerfile .dockerignore render.yaml requirements.txt
-git ls-files feature3_artifacts/feature3_tfidf_lightgbm_classifier.joblib
-git ls-files feature3_artifacts/feature3_taxonomy_config.json
-git ls-files feature7_artifacts/feature7_mp_composite_risk.parquet
-git ls-files feature5_artifacts/feature5_vendor_risk.parquet
-git ls-files feature1_artifacts/feature1_fact_work_disbursement_risk.parquet
-git ls-files feature2_artifacts/feature2_fact_work_cost_risk.parquet
-git ls-files shared_preprocessing_artifacts/fact_work_feature7.parquet
-```
+The ML Ops engineer must create the detailed AWS implementation plan
+for:
 
----
+-   [ ] Launching a `c7i-flex.large` EC2 instance.
+-   [ ] Selecting a compatible Free-Tier-eligible Linux AMI.
+-   [ ] Choosing an AWS region with acceptable latency to the existing
+    Render backend.
+-   [ ] Creating and securely storing an EC2 SSH key pair.
+-   [ ] Configuring the EC2 security group using least privilege.
+-   [ ] Selecting EBS storage appropriate for the Docker image,
+    artifacts, Docker layers, logs, and future updates while respecting
+    Free Plan/credit constraints.
+-   [ ] Installing Docker Engine on EC2.
+-   [ ] Transferring/building/pulling the `mplads-ml` Docker image.
+-   [ ] Running the container persistently with automatic restart.
+-   [ ] Providing a stable public endpoint for the Render Express
+    backend.
+-   [ ] Adding HTTPS/TLS; production traffic must not expose the API key
+    over plaintext HTTP.
+-   [ ] Configuring DNS/domain or another stable HTTPS endpoint if
+    required.
+-   [ ] Keeping FastAPI port `8000` private where practical and exposing
+    only the reverse-proxy HTTPS port.
+-   [ ] Configuring production `MPLADS_API_KEY`.
+-   [ ] Updating Render Express environment variables.
+-   [ ] Adding health monitoring, logs, restart behavior, and
+    disk/memory monitoring.
+-   [ ] Creating an update/rollback procedure for future Docker images.
+-   [ ] Tracking AWS credits and Free Plan expiration so the service
+    does not unexpectedly disappear when free access ends.
 
-## 5. Step 1 — Verify the Dockerfile
+------------------------------------------------------------------------
 
-`Dockerfile` already exists in the repo root. Verify its contents match below (selective per-file COPY, no whole-directory artifact copy):
+## 5. Step 1 --- Verify the Dockerfile
 
-```dockerfile
+`Dockerfile` already exists in the repo root. Verify its contents match
+below (selective per-file COPY, no whole-directory artifact copy):
+
+``` dockerfile
 # ──────────────────────────────────────────────────────────────────
 # MPLADS Risk Analytics — FastAPI ML Service
 # Multi-stage build for minimal production image
@@ -253,24 +326,69 @@ CMD ["sh", "-c", "uvicorn mplads_api.main:app --host 0.0.0.0 --port ${PORT:-8000
 
 ### Why These Specific Choices
 
-| Decision | Rationale |
-|---|---|
-| **`python:3.11-slim`** | Slim base (~50 MB) but includes glibc needed by numpy/scikit-learn. Alpine would fail on compiled wheels. |
-| **Multi-stage build** | Build stage has `build-essential` (~200 MB); production stage drops it, saving image size. |
-| **`--workers 1`** | Each worker holds ~60-100 MB of in-memory indexes (double-keyed work_index) plus the ~20 MB of parquets read at startup (~36 MB total artifacts baked into the image). One worker fits comfortably in 512 MB; two would risk OOM. Uses precomputed mp_top20 so no per-request sort. |
-| **`--timeout-keep-alive 120`** | Prevents Render's load balancer from dropping the connection on cold-start when loading artifacts (~15-30 sec). |
-| **`start-period=90s`** | Gives the FeatureStore 90 seconds to load the 4 startup parquets plus the NLP classifier before health checks start failing. Render uses healthCheckPath /health, not this Dockerfile HEALTHCHECK. |
-| **Non-root user** | Security best practice; prevents container escape attacks. |
-| **`${PORT:-8000}`** | Render injects `$PORT` at runtime; this respects it while defaulting to 8000 for local dev. |
-| **Docker `HEALTHCHECK`** | Used for local `docker run` and non-Render orchestrators. **Render ignores it** and uses `healthCheckPath: /health` from `render.yaml` instead. Both probe the same endpoint, so they are consistent. |
+  -----------------------------------------------------------------------
+  Decision                            Rationale
+  ----------------------------------- -----------------------------------
+  **`python:3.11-slim`**              Slim base (\~50 MB) but includes
+                                      glibc needed by numpy/scikit-learn.
+                                      Alpine would fail on compiled
+                                      wheels.
 
----
+  **Multi-stage build**               Build stage has `build-essential`
+                                      (\~200 MB); production stage drops
+                                      it, saving image size.
 
-## 6. Step 2 — Verify .dockerignore
+  **`--workers 1`**                   Each worker holds \~60-100 MB of
+                                      in-memory indexes (double-keyed
+                                      work_index) plus the \~20 MB of
+                                      parquets read at startup (\~36 MB
+                                      total artifacts baked into the
+                                      image). One worker fits comfortably
+                                      in 512 MB; two would risk OOM. Uses
+                                      precomputed mp_top20 so no
+                                      per-request sort.
 
-`.dockerignore` already exists in the repo root. Verify its contents match below (this block mirrors the real file exactly; global `*.csv` / `*.png` patterns are safe because every runtime artifact is `.parquet`, `.joblib`, or `.json`, and the tiny `*_run_metadata.json` files are never read by `FeatureStore.load_all` so they are not worth excluding):
+  **`--timeout-keep-alive 120`**      Prevents Render's load balancer
+                                      from dropping the connection on
+                                      cold-start when loading artifacts
+                                      (\~15-30 sec).
 
-```dockerignore
+  **`start-period=90s`**              Gives the FeatureStore 90 seconds
+                                      to load the 4 startup parquets plus
+                                      the NLP classifier before health
+                                      checks start failing. Render uses
+                                      healthCheckPath /health, not this
+                                      Dockerfile HEALTHCHECK.
+
+  **Non-root user**                   Security best practice; prevents
+                                      container escape attacks.
+
+  **`${PORT:-8000}`**                 Render injects `$PORT` at runtime;
+                                      this respects it while defaulting
+                                      to 8000 for local dev.
+
+  **Docker `HEALTHCHECK`**            Used for local `docker run` and
+                                      non-Render orchestrators. **Render
+                                      ignores it** and uses
+                                      `healthCheckPath: /health` from
+                                      `render.yaml` instead. Both probe
+                                      the same endpoint, so they are
+                                      consistent.
+  -----------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## 6. Step 2 --- Verify .dockerignore
+
+`.dockerignore` already exists in the repo root. Verify its contents
+match below (this block mirrors the real file exactly; global `*.csv` /
+`*.png` patterns are safe because every runtime artifact is `.parquet`,
+`.joblib`, or `.json`, and the tiny `*_run_metadata.json` files are
+never read by `FeatureStore.load_all` so they are not worth excluding):
+
+``` dockerignore
 # Node.js and frontend stay out of the ML image
 backend/
 frontend/
@@ -336,409 +454,383 @@ Thumbs.db
 *.png
 ```
 
-> [!TIP]
-> This `.dockerignore` plus selective COPY keeps the Docker build context and image lean (~36 MB runtime payload) by excluding the Node.js backend, frontend, notebooks, CSVs, training-only artifacts (`description_embeddings.npy`, `feature3_hdbscan.joblib`, intermediate Parquets), and visualization PNGs. Only the `mplads_api/` code, `requirements.txt`, and the **runtime-required** Parquet/Joblib/JSON artifact files are sent to the Docker daemon.
+> \[!TIP\] This `.dockerignore` plus selective COPY keeps the Docker
+> build context and image lean (\~36 MB runtime payload) by excluding
+> the Node.js backend, frontend, notebooks, CSVs, training-only
+> artifacts (`description_embeddings.npy`, `feature3_hdbscan.joblib`,
+> intermediate Parquets), and visualization PNGs. Only the `mplads_api/`
+> code, `requirements.txt`, and the **runtime-required**
+> Parquet/Joblib/JSON artifact files are sent to the Docker daemon.
 
----
+------------------------------------------------------------------------
 
-## 7. Step 3 — Verify render.yaml Blueprint
+------------------------------------------------------------------------
 
-`render.yaml` in the repo root must match below (already updated to add `mplads-ml`, remove the PORT override, and use `sync: false` secrets):
+## 7. Step 3 --- Local Docker Build & Validation
 
-```yaml
-# Render Blueprint — Express API, React/Vite Frontend, FastAPI ML Service
-# Enter all `sync: false` values in the Render dashboard when creating or syncing.
-services:
-  # ──────────────────────────────────────────────
-  # 1. Express.js Backend (Node.js Web Service)
-  # ──────────────────────────────────────────────
-  - type: web
-    name: MPLADS_Risk_Analysis
-    runtime: node
-    region: singapore
-    rootDir: backend
-    buildCommand: npm install
-    startCommand: npm run start
-    healthCheckPath: /api/health
-    autoDeployTrigger: commit
-    envVars:
-      - key: NODE_VERSION
-        value: "20"
-      - key: NODE_ENV
-        value: "production"
-      - key: MONGODB_URI
-        sync: false
-      - key: JWT_SECRET
-        sync: false
-      - key: JWT_EXPIRES_IN
-        value: "7d"
-      - key: CLIENT_URL
-        sync: false
-      - key: SEED_ADMIN_ON_START
-        value: "false"
-      # ── FastAPI ML Service Integration ──
-      - key: FASTAPI_ENABLED
-        value: "true"
-      - key: FASTAPI_URL
-        sync: false   # Set to https://mplads-ml.onrender.com in dashboard
-      - key: MPLADS_API_KEY
-        sync: false   # same strong random value as on mplads-ml
+The local Docker validation procedure remains part of the deployment
+plan and has already been executed successfully.
 
-  # ──────────────────────────────────────────────
-  # 2. React/Vite Frontend (Static Site)
-  # ──────────────────────────────────────────────
-  - type: web
-    name: MPLADS_Risk_Analysis-1
-    runtime: static
-    rootDir: frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    autoDeployTrigger: commit
-    envVars:
-      - key: VITE_API_URL
-        sync: false
+``` powershell
+# Build
+docker build -t mplads-ml:latest .
 
-  # ──────────────────────────────────────────────
-  # 3. FastAPI ML Service (Docker Web Service)
-  # ──────────────────────────────────────────────
-  - type: web
-    name: mplads-ml
-    runtime: docker
-    region: singapore
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    healthCheckPath: /health
-    plan: starter            # 512 MB RAM, 0.5 vCPU — sufficient for serving
-    autoDeployTrigger: commit
-    envVars:
-      - key: MPLADS_API_KEY
-        sync: false   # set a strong random value in the dashboard on both services
-      - key: PYTHONUNBUFFERED
-        value: "1"
+# Run
+docker run --rm -p 8000:8000 -e MPLADS_API_KEY=dev-local-key -e MPLADS_ENV=production --name mplads-ml mplads-ml:latest
+
+# Health test
+curl.exe http://localhost:8000/health
+
+# Authenticated API test
+curl.exe -H "X-API-Key: dev-local-key" http://localhost:8000/dashboard/summary
+
+# Image size
+docker images mplads-ml:latest --format "{{.Size}}"
+
+# Runtime memory
+docker stats mplads-ml --no-stream
 ```
 
-### What Changed from the Original
+### Recorded validation result
 
-| Change | Detail |
-|---|---|
-| `FASTAPI_ENABLED` flipped to `"true"` | Was `"false"` — enables the proxy in Express |
-| `FASTAPI_URL` added | Points Express at the new ML service's Render URL |
-| **New service block** added | `mplads-ml` — Docker web service for FastAPI |
-| **Same region** | Both Express and FastAPI in `singapore` for minimal latency |
-| **`starter` plan** | 512 MB RAM, adequate for ~60-100 MB of in-memory indexes plus Python overhead (precomputed mp_top20, frames released with del plus gc.collect) |
+``` text
+Application startup: SUCCESS
+/health: HTTP 200
+/dashboard/summary with correct X-API-Key: SUCCESS / valid JSON
+Incorrect or missing API key: HTTP 401
 
-> [!WARNING]
-> The `plan: starter` ($7/month) is the minimum paid tier with enough RAM. The free tier has 512 MB too, but spins down after 15 minutes of inactivity — causing 30-60 second cold starts where the FeatureStore reloads all artifacts. For production use, `starter` or higher is recommended.
+FeatureStore:
+works=86300
+mps=774
+vendors=9170
 
----
-
-## 8. Step 4 — Configure Environment Variables on Render
-
-After deploying the blueprint, set these values **manually** in the Render dashboard (marked `sync: false`):
-
-### On `MPLADS_Risk_Analysis` (Express Backend)
-
-| Variable | Value |
-|---|---|
-| `FASTAPI_URL` | `https://mplads-ml.onrender.com` (the URL Render assigns to the ML service) |
-| `MPLADS_API_KEY` | strong random value via `sync: false`, identical on both services (code default `mpladsAPI123` is dev-only) |
-| `MONGODB_URI` | *(keep existing value)* |
-| `JWT_SECRET` | *(keep existing value)* |
-| `CLIENT_URL` | *(keep existing value — your frontend URL)* |
-
-### On `mplads-ml` (FastAPI ML Service)
-
-| Variable | Value |
-|---|---|
-| `MPLADS_API_KEY` | **New** strong random value via `sync: false`, identical on both services — see warning below |
-| `MPLADS_ENV` | *Optional.* Only needed for explicitness; its absence already means auth-enforced (see NOTE) |
-| `PYTHONUNBUFFERED` | `1` (ensures logs stream in real-time to Render's log viewer) |
-
-> [!WARNING]
-> **Do not reuse `mpladsAPI123` in production.** The old `render.yaml` committed the literal value `mpladsAPI123` as `MPLADS_API_KEY`, so that string is permanently public in this repo's git history. `config.py` falls back to that default when `MPLADS_API_KEY` is unset, which would silently leave the service protected only by a publicly known key. Generate a fresh secret (e.g. `python -c "import secrets; print(secrets.token_urlsafe(32))"`) and set it via `sync: false` on **both** services. `main.py` now logs a startup `WARNING` if the service boots in non-development mode while still using the dev default, and §10c includes a verification curl for it.
-
-> [!NOTE]
-> `MPLADS_ENV` is absent in `render.yaml` by design: production defaults to enforced auth (no escape hatch). Only set `MPLADS_ENV=development` locally for tests. `verify_api_key` in `security.py` now **enforces** auth: it raises `HTTPException(401)` on a missing/wrong `X-API-Key` and `500` if no key is configured. `mlController.js` forwards `X-API-Key` on every proxied call. The key must be **identical** on both services; the default in code/env templates is `mpladsAPI123` (dev-only, must be rotated — see warning above).
-
----
-
-## 9. Step 5 — Configure the Node.js Backend to Connect
-
-The Express backend is **already fully configured** to proxy to FastAPI. No code changes are needed. The integration flow is:
-
-```
-Frontend                Express Backend              FastAPI ML Service
-  │                        │                             │
-  │  GET /api/analytics/   │  JWT plus INTERNAL_ROLES     │
-  │  dashboard-summary    │  X-API-Key forwarded          │
-  │───────────────────────▶│                             │
-  │                        │  GET /dashboard/summary     │
-  │                        │  X-API-Key: MPLADS_API_KEY    │
-  │                        │────────────────────────────▶│
-  │                        │                             │
-  │                        │◀────────────────────────────│
-  │                        │  200 OK { composite_risk..} │
-  │◀───────────────────────│                             │
-  │  200 OK (proxied JSON) │                             │
+Startup RSS reported by application: ~826 MB
+Docker steady-state memory: 710.3 MiB
 ```
 
-The proxy already forwards `X-API-Key` (ML-1 fix) and requires JWT plus INTERNAL_ROLES on `/api/analytics/*`. The only action required is setting `FASTAPI_ENABLED=true`, `FASTAPI_URL` (two-step: deploy `mplads-ml` first, then paste its URL), and matching `MPLADS_API_KEY` (`sync: false`) on both services, which the updated `render.yaml` already declares. Note: use `/api/analytics/dashboard-summary` on Express (it maps to FastAPI `/dashboard/summary`), and URL-encode MP identifiers because ambiguous names return 400 plus candidates.
+`dev-local-key` is only a local test secret. It must not be used in
+production.
 
----
+------------------------------------------------------------------------
 
-## 10. Step 6 — Deploy & Validate
+## 8. Step 4 --- Render Memory Blocker and Deployment Decision
 
-### 6a. Commit & Push
+### Original assumption
 
-```bash
-# Stage the new files
-git add Dockerfile .dockerignore render.yaml
+The original Render plan assumed the single-worker application would fit
+inside a 512 MB service.
 
-# Commit with a descriptive message
-git commit -m "deploy: Add Docker config for FastAPI ML service on Render
+### Actual measurement
 
-- Dockerfile: multi-stage Python 3.11-slim build with libgomp for LightGBM
-- .dockerignore: excludes Node.js, frontend, notebooks, training artifacts
-- render.yaml: adds mplads-ml Docker web service in Singapore region
-- Enables FASTAPI_ENABLED=true on Express backend"
+Production-style local testing disproved that assumption:
 
-# Push to trigger auto-deploy
-git push origin main
+``` text
+docker stats mplads-ml --no-stream
+
+MEM USAGE / LIMIT
+710.3MiB / 3.71GiB
 ```
 
-### 6b. Monitor the Build on Render
+The application also emitted:
 
-1. Go to **Render Dashboard** → **mplads-ml** service
-2. Watch the build logs. Expected timeline:
-   - Docker image build: ~3–5 minutes (first build; cached afterward)
-   - Artifact copy into image: ~30 seconds
-   - Startup / FeatureStore load: ~15–30 seconds
-3. Health check at `/health` should turn green within 90 seconds of container start (Docker HEALTHCHECK start-period is 90s to cover parquet plus classifier load)
-
-### 6c. Validation Test Suite
-
-Run these curl commands against the deployed ML service URL:
-
-```bash
-ML_URL="https://mplads-ml.onrender.com"
-API_KEY="<your MPLADS_API_KEY from the Render dashboard>"
-
-# 1. Health check (public, no key needed)
-curl -s "$ML_URL/health" | python -m json.tool
-# Expected: {"status":"healthy","works_indexed":>0,"mps_indexed":>0,...}
-
-# 2. NLP categorization (live inference)
-curl -s -X POST "$ML_URL/nlp/categorize-work" -H "X-API-Key: $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"description":"Construction of PCC road in village","declared_category":"Normal/Others"}' \
-  | python -m json.tool
-# Expected: {"category_nlp":"Road & Pathway Infrastructure","confidence":>0.5,...}
-
-# 3. MP risk lookup
-curl -s "$ML_URL/score/mp-risk/RS_KARTIKEYA%20SHARMA" -H "X-API-Key: $API_KEY" | python -m json.tool
-# Expected: {"mp_key":"RS_KARTIKEYA SHARMA","composite_risk_score":...}
-
-# 4. State risk aggregation
-curl -s "$ML_URL/score/state-risk/JHARKHAND" -H "X-API-Key: $API_KEY" | python -m json.tool
-# Expected: {"state":"Jharkhand","mp_count":>0,...}
-
-# 5. Key rotation check — the leaked dev default MUST be rejected
-curl -s -o /dev/null -w "%{http_code}\n" "$ML_URL/dashboard/summary" -H "X-API-Key: mpladsAPI123"
-# Expected: 401 (if 200, the dashboard MPLADS_API_KEY was never rotated — fix immediately)
-
-# 6. Missing key rejected
-curl -s -o /dev/null -w "%{http_code}\n" "$ML_URL/dashboard/summary"
-# Expected: 401
+``` text
+FeatureStore Load Complete (... rss=826MB)
 ```
 
-### 6d. End-to-End Validation via Express Proxy
+The disk size of the runtime artifacts is therefore **not an adequate
+proxy for runtime RAM consumption**. Deserialized data, Python objects,
+indexes, pandas/Arrow operations, the classifier, libraries, and startup
+allocations materially increase memory consumption.
 
-```bash
-BACKEND_URL="https://your-express-backend.onrender.com"
-TOKEN="<your-jwt-token>"
+### Decision
 
-# Proxied health check (Express JWT required; ML /health itself is public)
-curl -s "$BACKEND_URL/api/analytics/health" \
-  -H "Authorization: Bearer $TOKEN" | python -m json.tool
-# Expected: {"status":"healthy",...} relayed from FastAPI /health
+-   **Render Free ML deployment: rejected due to insufficient RAM.**
+-   **Code optimization solely to fit Render Free: rejected for this
+    deployment iteration.**
+-   **AWS EC2: selected.**
+-   **EC2 type: `c7i-flex.large` (2 vCPU, 4 GiB RAM, x86-64).**
 
-# Proxied NLP categorization
-curl -s -X POST "$BACKEND_URL/api/analytics/categorize-work" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"description":"Installation of solar street lights"}' \
-  | python -m json.tool
+The existing Render frontend/backend deployment remains unchanged except
+for the backend ML service URL and production ML API key.
+
+------------------------------------------------------------------------
+
+## 9. Step 5 --- AWS EC2 Deployment Requirements
+
+This section intentionally defines **requirements and constraints**
+rather than pretending the AWS implementation has already been
+completed. The ML Ops engineer should use these facts to produce the
+exact AWS deployment runbook.
+
+### Required compute target
+
+``` text
+Provider: AWS EC2
+Instance type: c7i-flex.large
+vCPU: 2
+Memory: 4 GiB
+Architecture: x86-64
+Application packaging: existing Dockerfile
+Container name: mplads-ml
+FastAPI internal port: 8000
+Uvicorn workers: 1 (unchanged initially)
+Health endpoint: /health
 ```
 
----
+### OS / AMI
 
-## 11. Step 7 — Health Monitoring & Alerting
+Choose a currently supported, **Free-Tier-eligible x86-64 Linux AMI**
+compatible with `c7i-flex.large`. The final runbook must record the
+exact AMI family/version selected.
 
-### Render Built-in Monitoring
+### Network and security requirements
 
-- **Health check path:** `/health` — Render pings this every 30 seconds. If 3 consecutive checks fail, the service is restarted.
-- **Logs:** Available in Render dashboard under the service's "Logs" tab. `PYTHONUNBUFFERED=1` ensures real-time streaming.
+The deployment plan must include:
 
-### Recommended: Add a Startup Log Banner
+1.  EC2 in a public subnet only if direct internet ingress is required.
+2.  Security group with least-privilege inbound rules.
+3.  SSH (`22`) should not be globally open; restrict administration
+    access as tightly as practical.
+4.  Public application access should use **HTTPS (443)**.
+5.  Do not intentionally expose FastAPI port `8000` directly to the
+    public internet if a reverse proxy terminates HTTPS on the instance.
+6.  `/health` may remain unauthenticated as currently designed.
+7.  All protected endpoints continue to require `X-API-Key`.
+8.  The production API key must be stored as an environment
+    variable/secret on EC2, never baked into the Docker image or
+    committed to git.
+9.  The known development/default value `mpladsAPI123` must not be used
+    in production.
 
-The existing `lifespan` function in [`main.py`](file:///C:/Users/anura/OneDrive/Desktop/MPLADS_Risk_Analysis/mplads_api/main.py) already logs startup/shutdown. The FeatureStore logs the count of indexed records. Additionally, `lifespan` now emits a `WARNING` at boot when the service runs outside `MPLADS_ENV=development` while still using the publicly-known dev-default API key — visible in Render's log streamer as a guardrail against the forgotten `sync: false` rotation. This is sufficient for monitoring.
+### Container runtime requirements
 
-### Optional: Express-Side Health Relay
+The AWS runbook must specify:
 
-The Express backend already exposes `GET /api/analytics/health` which proxies to FastAPI's `/health`. The frontend can call this to show an ML service status indicator in the dashboard.
+-   Docker Engine installation.
+-   Image build or image-pull strategy.
+-   Exact production `docker run`/Compose/systemd strategy.
+-   Restart policy (for example, automatic restart after process/VM
+    reboot).
+-   Environment variable injection.
+-   Log access/rotation.
+-   Disk cleanup strategy for old Docker layers/images.
+-   Health-check verification.
+-   Deployment rollback procedure.
 
----
+### Stable endpoint / TLS
 
-## 12. Seamless Future Update Strategy
+The Express backend on Render requires a stable HTTPS URL. The AWS plan
+must therefore define the production endpoint strategy, including TLS
+certificate provisioning/renewal and whether a domain/subdomain or
+another AWS-supported stable endpoint will be used.
 
-This is the critical section for **handling future ML updates without downtime**.
+Do not finalize `FASTAPI_URL` until that HTTPS endpoint exists.
 
-### Update Type 1: Re-scored Artifacts (Most Common)
+------------------------------------------------------------------------
 
-**Scenario:** Re-run notebooks with updated data → new Parquet/Joblib files.
+## 10. Step 6 --- Backend Integration Requirements
 
-**Process:**
-1. Replace artifact files locally (e.g., new `feature7_mp_composite_risk.parquet`)
-2. Commit and push:
-   ```bash
-   git add feature1_artifacts/feature1_fact_work_disbursement_risk.parquet feature2_artifacts/feature2_fact_work_cost_risk.parquet feature5_artifacts/feature5_vendor_risk.parquet feature7_artifacts/feature7_mp_composite_risk.parquet shared_preprocessing_artifacts/fact_work_feature7.parquet feature3_artifacts/feature3_tfidf_lightgbm_classifier.joblib feature3_artifacts/feature3_taxonomy_config.json
-   git commit -m "data: Re-score with September 2026 data refresh"
-   git push origin main
-   ```
-3. Render auto-deploys the Docker service. The new image contains the updated artifacts.
-4. Render performs a **zero-downtime rolling deploy** — the old container serves traffic until the new one passes health checks.
+The Express proxy implementation remains unchanged.
 
-> [!TIP]
-> This is the beauty of the architecture: because artifacts are baked into the Docker image at build time and loaded into RAM at startup, updating data is just a `git push`. No database migrations, no file uploads, no manual steps.
+Once the EC2 ML endpoint is ready, configure the Render **Express
+backend**:
 
-### Update Type 2: New API Endpoints
-
-**Scenario:** Feature 4 (Duplicate Detection) or Feature 6 (Process Delay) is implemented.
-
-**Process:**
-1. Add new router file (e.g., `mplads_api/routers/duplicate.py`)
-2. Add new schema file (e.g., `mplads_api/schemas/duplicate.py`)
-3. Register the router in [`main.py`](file:///C:/Users/anura/OneDrive/Desktop/MPLADS_Risk_Analysis/mplads_api/main.py):
-   ```python
-   from mplads_api.routers import duplicate
-   app.include_router(duplicate.router)
-   ```
-4. Add the corresponding proxy endpoint in Express's `mlController.js` and `mlRoutes.js` (forward `X-API-Key`; keep JWT plus INTERNAL_ROLES)
-5. Commit, push → auto-deploy
-
-### Update Type 3: Model Retraining (scikit-learn version change)
-
-**Scenario:** Retrained models with a newer scikit-learn version.
-
-**Process:**
-1. Update `requirements.txt` to the new version:
-   ```
-   scikit-learn==1.7.0  # Updated from 1.6.1
-   ```
-2. Re-train and re-export all `.joblib` files with the new version
-3. Commit all updated joblib files + `requirements.txt`
-4. Push → Docker rebuilds with the new scikit-learn → auto-deploy
-
-> [!CAUTION]
-> **Never update `requirements.txt` without re-exporting ALL joblib files.** Joblib serialization includes the scikit-learn version in the pickle metadata. Version mismatches will crash at load time.
-
-### Update Type 4: Python Dependency Changes
-
-**Scenario:** Add a new library (e.g., `sentence-transformers` for live embedding inference).
-
-**Process:**
-1. Add to `requirements.txt`
-2. If the new library requires system packages (e.g., `libblas`), update the `apt-get install` line in the Dockerfile
-3. Push → full Docker rebuild → auto-deploy
-
-### Update Type 5: Infrastructure Scaling
-
-**Scenario:** Data volume grows, need more RAM or workers.
-
-**Process:**
-1. Update `render.yaml`:
-   ```yaml
-   plan: standard   # Upgraded from starter (1 GB RAM, 1 vCPU)
-   ```
-2. Optionally increase workers in the Dockerfile CMD:
-   ```dockerfile
-   CMD ["sh", "-c", "uvicorn mplads_api.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"]
-   ```
-3. Push → Render applies the new plan on next deploy
-
-### Version Tagging Strategy
-
-Tag each deployment for rollback capability:
-
-```bash
-git tag -a ml-v1.0.0 -m "Initial ML deployment with F1/F2/F3/F5/F7 scoring"
-git push origin ml-v1.0.0
-
-# After a data refresh:
-git tag -a ml-v1.1.0 -m "Data refresh: September 2026 MPLADS portal data"
-git push origin ml-v1.1.0
+``` text
+FASTAPI_ENABLED=true
+FASTAPI_URL=https://<final-aws-ml-endpoint>
+MPLADS_API_KEY=<new-production-secret>
 ```
 
-To rollback on Render: go to the service dashboard → "Manual Deploy" → select a previous commit.
+Configure the EC2 FastAPI container with the **same** secret:
 
----
+``` text
+MPLADS_API_KEY=<same-new-production-secret>
+```
 
-## 13. Cost Estimation
+Request path:
 
-| Service | Plan | Monthly Cost | RAM | Notes |
-|---|---|---|---|---|
-| Express Backend | Starter | $7/month | 512 MB | Already deployed |
-| React Frontend | Static (Free) | $0/month | N/A | CDN-served |
-| **FastAPI ML Service** | **Starter** | **$7/month** | **512 MB** | New service |
-| **FastAPI ML Service** | Free | $0/month | 512 MB | Spins down after 15 min inactivity |
-| | | | | |
-| **Total (with Starter ML)** | | **$14/month** | | |
-| **Total (with Free ML)** | | **$7/month** | | Cold starts on ML endpoints |
+``` text
+Browser
+  ↓ JWT-authenticated request
+Render React → Render Express
+                    ↓ X-API-Key
+               HTTPS
+                    ↓
+              AWS EC2 ML API
+                    ↓
+              Docker / FastAPI
+```
 
-> [!NOTE]
-> The free tier is viable for demo/staging environments. The Starter tier ($7/month) eliminates cold starts and is recommended for production. The Standard tier ($25/month, 1 GB RAM) would be needed if in-memory indexes grow past ~300 MB or you want 2+ workers.
+The API key must never be placed in the React frontend.
 
----
+------------------------------------------------------------------------
 
-## 14. Risk Register & Mitigations
+## 11. Step 7 --- Production Validation Requirements
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| **OOM on Starter plan** | Low | Service crash | Monitor memory via Render metrics. Runtime payload is ~36 MB on disk; in-memory indexes are ~60-100 MB plus Python overhead, total well under 512 MB (startup log reports rss=...MB via psutil). If OOM, upgrade to Standard plan. |
-| **Cold start on free tier** | High (if free) | 30-60s latency on first request | Use Starter plan for production. Or add a cron job to ping `/health` every 10 minutes. |
-| **scikit-learn version mismatch** | Medium | Model load failure | `requirements.txt` is fully pinned (scikit-learn==1.6.1 plus all serving deps). Never change without re-exporting ALL joblibs and re-running tests. |
-| **Git repo too large** | Low | Slow clones | Current tracked artifacts are ~110 MB parquet plus ~31 MB joblib plus ~72 MB training-only npy/HDBSCAN in git (gitignored UMAP/transformer excluded). If they grow past 500 MB, switch to Git LFS for `.parquet` and `.joblib` files. |
-| **CORS issues** | Very Low | API errors | FastAPI currently sets `allow_origins=["*"]` with credentials (ML-5, skipped as non-severe). Express is the only caller via server-side fetch, so no browser CORS is involved. |
-| **Secret exposure** | Low | Security breach | `MPLADS_API_KEY` uses `sync: false` on both services (dashboard-set, encrypted); the Docker image contains no secret. Code default `mpladsAPI123` is dev-only. Prod auth is enforced (401/500) with an `MPLADS_ENV=development` escape hatch for local tests. |
-| **Render service URL changes** | Very Low | Integration break | URL is stable once created. If renamed, update `FASTAPI_URL` in Express's env vars. Deploy order: create `mplads-ml` first, then set `FASTAPI_URL` on Express and enable `FASTAPI_ENABLED=true`. |
+After AWS deployment, repeat the same functional checks against the AWS
+HTTPS endpoint:
 
----
+1.  `GET /health` → HTTP 200.
+2.  `GET /dashboard/summary` without API key → HTTP 401.
+3.  Same endpoint with incorrect key → HTTP 401.
+4.  Same endpoint with production key → HTTP 200 + valid JSON.
+5.  `POST /nlp/categorize-work` → successful inference.
+6.  MP/vendor/state scoring endpoints → successful responses.
+7.  Render Express `/api/analytics/*` proxy → successful end-to-end
+    response.
+8.  Verify `mpladsAPI123` is rejected.
+9.  Verify container memory after deployment.
+10. Reboot EC2 and confirm the ML container automatically returns.
+11. Verify HTTPS certificate and ensure protected traffic is not sent
+    over plaintext HTTP.
 
-## 15. Appendix — Complete File Contents
+------------------------------------------------------------------------
 
-### Files Created
+## 12. Future Update and Operations Strategy
 
-| File | Path | Status |
-|---|---|---|
-| `Dockerfile` | `./Dockerfile` | **Created** - selective COPY of 5 parquets (4 loaded at startup + 1 fallback) plus NLP classifier and taxonomy (contents in Step 1) |
-| `.dockerignore` | `./.dockerignore` | **Created** - excludes intermediates, unused audit joblibs, CSVs, PNGs (contents in Step 2) |
-| `render.yaml` | `./render.yaml` | **Replaced** - adds `mplads-ml` Docker service, no PORT override, `sync: false` API key (contents in Step 3) |
+### Artifact/model updates
 
-### Files That Require NO Changes
+The Docker image remains the deployment unit. Future Parquet/model
+updates should continue to be baked into a newly built image rather than
+manually copied into a running container.
 
-| File | Reason |
-|---|---|
-| `mplads_api/main.py` | Already has lifespan, CORS, all routers |
-| `mplads_api/config.py` | Uses relative `Path(__file__)` — works in Docker |
-| `mplads_api/core/feature_store.py` | Loads from relative paths that match Docker COPY layout |
-| `backend/src/controllers/mlController.js` | Proxy already built and tested |
-| `backend/src/routes/mlRoutes.js` | Routes already wired |
-| `backend/src/config/env.js` | Reads `FASTAPI_URL`, `FASTAPI_ENABLED`, and `MPLADS_API_KEY` from env vars |
-| `requirements.txt` | Fully pinned with == including `psutil==6.1.0` for RSS logging; Python 3.11 target |
+The AWS runbook should define a repeatable process:
+
+``` text
+Update artifacts/code
+        ↓
+Run local tests
+        ↓
+Build Docker image
+        ↓
+Version/tag image
+        ↓
+Deploy new image to EC2
+        ↓
+Wait for /health
+        ↓
+Run API validation
+        ↓
+Remove old image only after successful validation
+```
+
+### Future memory growth
+
+The selected 4 GiB instance intentionally provides headroom over the
+current \~710 MiB steady measurement. Nevertheless:
+
+-   Record memory after each material model/data update.
+-   Treat sustained memory approaching the instance limit as a scaling
+    event.
+-   Do not increase Uvicorn workers without re-measuring memory because
+    each worker can duplicate substantial application state.
+-   If future requirements exceed the selected instance, reassess EC2
+    sizing and the AWS credit/cost impact before changing instance type.
+
+### Versioning / rollback
+
+Continue using Git tags for application releases and additionally tag
+Docker images/releases so the previous known-good version can be
+restored.
+
+------------------------------------------------------------------------
+
+## 13. Cost / Free-Plan Constraint
+
+### Current account state
+
+``` text
+AWS plan: Free Plan
+Credits remaining at decision time: $68.38 USD
+Days remaining at decision time: 126
+Selected instance: c7i-flex.large
+```
+
+AWS documentation for newer Free Tier accounts includes `c7i-flex.large`
+among Free-Tier-eligible EC2 instance types. Under the AWS Free Plan,
+usage consumes credits and the Free Plan ends when its duration expires
+or credits are depleted.
+
+### Mandatory operational constraint
+
+> **Do not upgrade this AWS account to the Paid Plan as part of this
+> deployment without explicit owner approval.**
+
+The goal is zero out-of-pocket AWS charges during the current Free Plan.
+The engineer must monitor remaining credits and understand that the ML
+service will not remain hosted indefinitely for free under this
+promotional plan.
+
+The AWS implementation plan should include a credit/budget monitoring
+procedure and an explicit migration/shutdown decision before the
+remaining free period ends.
+
+------------------------------------------------------------------------
+
+## 14. Risk Register
+
+  -----------------------------------------------------------------------
+  Risk                    Status / Impact         Required mitigation
+  ----------------------- ----------------------- -----------------------
+  Render 512 MB OOM       **Confirmed blocker**   Do not deploy ML
+                          --- container uses      service on Render Free;
+                          \~710 MiB steady        use selected EC2 target
+
+  EC2 memory growth       Future models/data may  4 GiB selected for
+                          increase RAM            headroom; monitor after
+                                                  every update
+
+  AWS Free Plan expires / ML service loses free   Track credits and
+  credits deplete         hosting                 remaining days; decide
+                                                  migration/upgrade
+                                                  before expiry
+
+  Secret exposure         Unauthorized ML API     Fresh production key,
+                          access                  identical on Express +
+                                                  EC2, never in
+                                                  frontend/git/image
+
+  Plain HTTP              API key could be        Production endpoint
+                          exposed in transit      must use HTTPS
+
+  EC2 reboot/process      ML API unavailable      Configure persistent
+  failure                                         container/restart
+                                                  policy and verify
+                                                  reboot recovery
+
+  SSH exposure            Server compromise       Restrict port 22;
+                                                  least-privilege
+                                                  security group
+
+  Port 8000 exposure      Unnecessary attack      Keep private behind
+                          surface                 HTTPS reverse proxy
+                                                  where practical
+
+  scikit-learn mismatch   Joblib load failure /   Keep pinned serving
+                          incorrect behavior      dependencies and
+                                                  retrain/re-export when
+                                                  versions change
+
+  Docker disk growth      EC2 disk can fill over  Image/layer cleanup and
+                          repeated deployments    disk monitoring
+
+  Single EC2 instance     Single point of failure Accept for current
+                                                  free/demo deployment;
+                                                  document future HA path
+                                                  if production SLA
+                                                  requires it
+  -----------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## 15. Appendix --- Local Docker Test Commands
+
+The original local Docker build/test block is retained below for
+reference.
 
 ### Docker Build & Test Commands (Local Verification)
 
-```bash
+``` bash
 # Build locally
 docker build -t mplads-ml:latest .
 
@@ -758,24 +850,41 @@ docker images mplads-ml:latest --format "{{.Size}}"
 docker stats mplads-ml --no-stream --format "{{.MemUsage}}"
 ```
 
-### Quick Summary: Three Commands to Deploy
+------------------------------------------------------------------------
 
-```bash
-# 1. Files already exist — verify, then commit if untracked
-git status --short
-# Expected: Dockerfile, .dockerignore present; render.yaml modified
+## Handoff to ML Ops Engineer
 
-# 2. Commit and push
-git add Dockerfile .dockerignore render.yaml ML_Deployment.md
-git commit -m "deploy: Dockerize and deploy FastAPI ML service on Render"
-git push origin main
+The Docker packaging phase is complete and locally validated. **Do not
+redesign the application or optimize it merely to fit Render Free.**
 
-# 3. Two-step wiring: deploy mplads-ml first, then set FASTAPI_URL
-#    on the Express service in the Render dashboard, keeping the
-#    same MPLADS_API_KEY (sync: false) on both services.
-#    → https://mplads-ml.onrender.com (URL assigned by Render after deploy)
+Create the AWS deployment runbook using these fixed inputs:
+
+``` text
+Cloud: AWS EC2
+Instance: c7i-flex.large
+CPU/RAM: 2 vCPU / 4 GiB
+Architecture: x86-64
+Docker image: mplads-ml:latest
+Current steady container RAM: ~710 MiB
+Observed startup RSS: ~826 MB
+FastAPI port: 8000
+Health: /health
+Workers: 1
+Frontend: Render
+Express backend: Render
+Express → ML: HTTPS + X-API-Key
+AWS account: Free Plan
+Credits at decision: $68.38
+Free-plan time remaining at decision: 126 days
+Constraint: no intentional upgrade to Paid Plan
 ```
 
----
+The AWS runbook must cover **AMI selection, EC2 launch configuration,
+EBS sizing, key pair/SSH, security groups, Docker installation, image
+deployment, persistent restart behavior, HTTPS/TLS, stable endpoint/DNS
+strategy, secrets, Render backend wiring, monitoring, credit tracking,
+updates, rollback, and final end-to-end validation**.
 
-> **End of Deployment Plan.** All steps above are concrete, copy-pasteable, and designed so that future updates to the ML layer require only `git push` — no manual infrastructure changes.
+------------------------------------------------------------------------
+
+> **End of revised deployment plan.**

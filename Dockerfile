@@ -20,6 +20,7 @@ COPY feature5_artifacts/feature5_vendor_risk.parquet ./feature5_artifacts/featur
 COPY feature7_artifacts/feature7_mp_composite_risk.parquet ./feature7_artifacts/feature7_mp_composite_risk.parquet
 COPY feature3_artifacts/feature3_tfidf_lightgbm_classifier.joblib ./feature3_artifacts/feature3_tfidf_lightgbm_classifier.joblib
 COPY feature3_artifacts/feature3_taxonomy_config.json ./feature3_artifacts/feature3_taxonomy_config.json
+
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 CMD curl -f http://localhost:8000/health || exit 1
